@@ -21,9 +21,10 @@ export interface LogEntry {
 
 interface LogPanelProps {
   logs: LogEntry[];
+  onLogClick?: (log: LogEntry) => void;
 }
 
-export const LogPanel: React.FC<LogPanelProps> = ({ logs }) => {
+export const LogPanel: React.FC<LogPanelProps> = ({ logs, onLogClick }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -99,12 +100,14 @@ export const LogPanel: React.FC<LogPanelProps> = ({ logs }) => {
             <div
               key={log.id}
               className={cn(
-                "glass-card p-3 rounded-xl animate-slide-up transition-all duration-300 hover:scale-[1.02]",
-                index === logs.length - 1 && "neon-glow"
+                "glass-card p-3 rounded-xl animate-slide-up transition-all duration-300 hover:scale-[1.02] cursor-pointer",
+                index === logs.length - 1 && "neon-glow",
+                onLogClick && "hover:neon-glow"
               )}
               style={{
                 animationDelay: `${Math.min(index * 50, 500)}ms`,
               }}
+              onClick={() => onLogClick?.(log)}
             >
               <div className="flex items-start gap-3">
                 <div className="flex-shrink-0 mt-0.5">

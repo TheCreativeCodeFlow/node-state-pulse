@@ -32,6 +32,7 @@ interface NetworkCanvasProps {
   packets: Packet[];
   onNodeUpdate: (node: Node) => void;
   onNodeCreate: (x: number, y: number) => void;
+  mode?: 'select' | 'add' | 'connect' | 'delete';
 }
 
 export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
@@ -40,6 +41,7 @@ export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
   packets,
   onNodeUpdate,
   onNodeCreate,
+  mode = 'select',
 }) => {
   const canvasRef = useRef<HTMLDivElement>(null);
   const [draggedNode, setDraggedNode] = useState<string | null>(null);
@@ -102,11 +104,20 @@ export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
     }
   }, [draggedNode, handleMouseMove, handleMouseUp]);
 
+  const getCursorClass = () => {
+    switch (mode) {
+      case 'add': return 'cursor-copy';
+      case 'connect': return 'cursor-crosshair';
+      case 'delete': return 'cursor-not-allowed';
+      default: return 'cursor-default';
+    }
+  };
+
   return (
     <div
       ref={canvasRef}
-      className="relative w-full h-full glass-card overflow-hidden cursor-crosshair"
-      onDoubleClick={handleCanvasDoubleClick}
+      className={`relative w-full h-full glass-card overflow-hidden ${getCursorClass()}`}
+      onDoubleClick={mode === 'add' ? handleCanvasDoubleClick : undefined}
     >
       {/* Circuit grid background */}
       <div className="absolute inset-0 opacity-10">
