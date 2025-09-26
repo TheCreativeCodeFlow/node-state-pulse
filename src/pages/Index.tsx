@@ -38,9 +38,7 @@ const Index = () => {
   if (currentView === 'simulator') {
     return (
       <SimulatorLayout 
-        sessionId={currentSessionId} 
         onBackToDashboard={() => setCurrentView('dashboard')} 
-        onBackToSessions={handleBackToSessions}
       />
     );
   }

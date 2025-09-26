@@ -7,9 +7,11 @@ export interface Node {
   id: string;
   x: number;
   y: number;
-  type: 'server' | 'client' | 'router';
+  type: 'node';
   active: boolean;
   label: string;
+  isSource?: boolean;
+  isDestination?: boolean;
 }
 
 export interface Edge {
@@ -32,7 +34,9 @@ interface NetworkCanvasProps {
   packets: Packet[];
   onNodeUpdate: (node: Node) => void;
   onNodeCreate: (x: number, y: number) => void;
+  onNodeClick?: (node: Node) => void;
   mode?: 'select' | 'add' | 'connect' | 'delete';
+  connectingFromNode?: string | null;
 }
 
 export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
@@ -41,7 +45,9 @@ export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
   packets,
   onNodeUpdate,
   onNodeCreate,
+  onNodeClick,
   mode = 'select',
+  connectingFromNode,
 }) => {
   const canvasRef = useRef<HTMLDivElement>(null);
   const [draggedNode, setDraggedNode] = useState<string | null>(null);
@@ -84,14 +90,24 @@ export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
   }, []);
 
   const handleCanvasDoubleClick = useCallback((event: React.MouseEvent) => {
-    if (!canvasRef.current) return;
+    if (mode !== 'add' || !canvasRef.current) return;
     
     const rect = canvasRef.current.getBoundingClientRect();
     const x = event.clientX - rect.left;
     const y = event.clientY - rect.top;
     
     onNodeCreate(x, y);
-  }, [onNodeCreate]);
+  }, [onNodeCreate, mode]);
+
+  const handleCanvasClick = useCallback((event: React.MouseEvent) => {
+    if (mode !== 'add' || !canvasRef.current) return;
+    
+    const rect = canvasRef.current.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+    
+    onNodeCreate(x, y);
+  }, [onNodeCreate, mode]);
 
   useEffect(() => {
     if (draggedNode) {
@@ -117,7 +133,7 @@ export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
     <div
       ref={canvasRef}
       className={`relative w-full h-full glass-card overflow-hidden ${getCursorClass()}`}
-      onDoubleClick={mode === 'add' ? handleCanvasDoubleClick : undefined}
+      onClick={mode === 'add' ? handleCanvasClick : undefined}
     >
       {/* Circuit grid background */}
       <div className="absolute inset-0 opacity-10">
@@ -177,7 +193,10 @@ export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
           key={node.id}
           node={node}
           onDragStart={(event) => handleNodeDragStart(node.id, event)}
+          onClick={onNodeClick}
           isDragged={draggedNode === node.id}
+          isConnecting={connectingFromNode === node.id}
+          canConnectTo={mode === 'connect' && connectingFromNode && connectingFromNode !== node.id}
         />
       ))}
 
@@ -189,7 +208,7 @@ export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
               Network Canvas
             </h3>
             <p className="text-muted-foreground">
-              Double-click anywhere to create nodes, then drag to connect and position them.
+              Select 'Add Node' mode and click anywhere to create nodes, then drag to connect and position them.
             </p>
           </div>
         </div>

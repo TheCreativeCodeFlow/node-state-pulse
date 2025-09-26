@@ -6,38 +6,37 @@ import { cn } from '@/lib/utils';
 interface NetworkNodeProps {
   node: Node;
   onDragStart: (event: React.MouseEvent) => void;
+  onClick?: (node: Node) => void;
   isDragged: boolean;
+  isConnecting?: boolean;
+  canConnectTo?: boolean;
 }
 
 export const NetworkNode: React.FC<NetworkNodeProps> = ({
   node,
   onDragStart,
+  onClick,
   isDragged,
+  isConnecting = false,
+  canConnectTo = false,
 }) => {
   const getNodeIcon = () => {
-    switch (node.type) {
-      case 'server':
-        return <Server className="w-6 h-6" />;
-      case 'client':
-        return <Monitor className="w-6 h-6" />;
-      case 'router':
-        return <Wifi className="w-6 h-6" />;
-      default:
-        return <Server className="w-6 h-6" />;
-    }
+    return <div className="w-4 h-4 bg-current rounded-full" />;
   };
 
   const getNodeColor = () => {
     if (!node.active) return 'status-error';
-    switch (node.type) {
-      case 'server':
-        return 'neon-blue';
-      case 'client':
-        return 'neon-green';
-      case 'router':
-        return 'neon-purple';
-      default:
-        return 'neon-blue';
+    if (isConnecting) return 'neon-yellow';
+    if (canConnectTo) return 'neon-cyan';
+    if (node.isSource) return 'neon-green';
+    if (node.isDestination) return 'neon-purple';
+    return 'neon-blue';
+  };
+
+  const handleClick = (event: React.MouseEvent) => {
+    event.stopPropagation();
+    if (onClick) {
+      onClick(node);
     }
   };
 
@@ -46,7 +45,10 @@ export const NetworkNode: React.FC<NetworkNodeProps> = ({
       className={cn(
         "absolute glass-card p-4 rounded-2xl cursor-move select-none transition-all duration-300 hover:scale-105 min-w-24 text-center",
         isDragged && "scale-110 neon-glow z-50",
-        !node.active && "animate-pulse-red opacity-80"
+        !node.active && "animate-pulse-red opacity-80",
+        (node.isSource || node.isDestination) && "ring-2 ring-current",
+        isConnecting && "ring-4 ring-neon-yellow animate-pulse",
+        canConnectTo && "ring-2 ring-neon-cyan animate-bounce cursor-pointer"
       )}
       style={{
         left: node.x - 48,
@@ -54,6 +56,7 @@ export const NetworkNode: React.FC<NetworkNodeProps> = ({
         color: `hsl(var(--${getNodeColor()}))`,
       }}
       onMouseDown={onDragStart}
+      onClick={handleClick}
     >
       <div className="flex flex-col items-center gap-2">
         <div 
@@ -71,6 +74,18 @@ export const NetworkNode: React.FC<NetworkNodeProps> = ({
         <span className="text-xs font-medium text-foreground/80 truncate max-w-20">
           {node.label}
         </span>
+        {isConnecting && (
+          <div className="text-xs font-bold text-neon-yellow">CONNECTING</div>
+        )}
+        {canConnectTo && (
+          <div className="text-xs font-bold text-neon-cyan">CONNECT TO</div>
+        )}
+        {node.isSource && (
+          <div className="text-xs font-bold text-neon-green">SOURCE</div>
+        )}
+        {node.isDestination && (
+          <div className="text-xs font-bold text-neon-purple">DEST</div>
+        )}
       </div>
 
       {/* Connection points */}

@@ -1,254 +1,95 @@
-import React, { useMemo } from 'react';
+import React from 'react';
 import { Card } from './ui/card';
 import { Badge } from './ui/badge';
-import { 
-  TrendingUp, 
-  TrendingDown, 
-  Activity, 
-  Clock,
-  AlertCircle,
-  CheckCircle
-} from 'lucide-react';
+import { BarChart3, TrendingUp, Activity, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { LogEntry } from './LogPanel';
 
 interface AnalyticsDashboardProps {
-  logs: LogEntry[];
+  className?: string;
 }
 
-interface KPI {
-  label: string;
-  value: string;
-  change: number;
-  trend: 'up' | 'down' | 'neutral';
-  icon: React.ComponentType<{ className?: string }>;
-  color: string;
-}
-
-export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({ logs }) => {
-  const analytics = useMemo(() => {
-    const packetLogs = logs.filter(log => 
-      log.type.startsWith('packet_') && log.type !== 'packet_sent'
-    );
-    
-    const delivered = logs.filter(log => log.type === 'packet_delivered').length;
-    const lost = logs.filter(log => log.type === 'packet_lost').length;
-    const corrupted = logs.filter(log => log.type === 'packet_corrupted').length;
-    const total = delivered + lost + corrupted;
-    
-    const deliveryRate = total > 0 ? (delivered / total) * 100 : 0;
-    const lossRate = total > 0 ? ((lost + corrupted) / total) * 100 : 0;
-    
-    // Calculate average latency (simulated)
-    const avgLatency = total > 0 ? Math.floor(Math.random() * 100) + 50 : 0;
-    
-    // Find most failing node
-    const nodeFailures = logs
-      .filter(log => log.type === 'node_failed' && log.nodeId)
-      .reduce((acc, log) => {
-        if (log.nodeId) {
-          acc[log.nodeId] = (acc[log.nodeId] || 0) + 1;
-        }
-        return acc;
-      }, {} as Record<string, number>);
-    
-    const topFailingNode = Object.entries(nodeFailures)
-      .sort(([,a], [,b]) => b - a)[0]?.[0] || 'None';
-
-    return {
-      deliveryRate,
-      lossRate,
-      avgLatency,
-      topFailingNode,
-      totalPackets: total,
-      delivered,
-      lost,
-      corrupted,
-    };
-  }, [logs]);
-
-  const kpis: KPI[] = [
-    {
-      label: 'Delivery Rate',
-      value: `${analytics.deliveryRate.toFixed(1)}%`,
-      change: analytics.deliveryRate - 85, // Compare to baseline
-      trend: analytics.deliveryRate >= 90 ? 'up' : analytics.deliveryRate >= 70 ? 'neutral' : 'down',
-      icon: CheckCircle,
-      color: 'neon-green',
-    },
-    {
-      label: 'Loss Rate',
-      value: `${analytics.lossRate.toFixed(1)}%`,
-      change: analytics.lossRate - 10, // Compare to baseline
-      trend: analytics.lossRate <= 5 ? 'up' : analytics.lossRate <= 15 ? 'neutral' : 'down',
-      icon: AlertCircle,
-      color: 'status-error',
-    },
-    {
-      label: 'Avg Latency',
-      value: `${analytics.avgLatency}ms`,
-      change: analytics.avgLatency - 100, // Compare to baseline
-      trend: analytics.avgLatency <= 50 ? 'up' : analytics.avgLatency <= 150 ? 'neutral' : 'down',
-      icon: Clock,
-      color: 'neon-cyan',
-    },
-    {
-      label: 'Total Packets',
-      value: analytics.totalPackets.toString(),
-      change: analytics.totalPackets - (logs.length > 10 ? 5 : 0),
-      trend: 'up',
-      icon: Activity,
-      color: 'neon-blue',
-    },
-  ];
-
-  const AnimatedCounter: React.FC<{ value: string; className?: string }> = ({ 
-    value, 
-    className 
-  }) => {
-    return (
-      <span className={cn("font-bold text-2xl animate-spring", className)}>
-        {value}
-      </span>
-    );
-  };
-
+export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({ className }) => {
   return (
-    <div className="space-y-6 p-6">
-      {/* Header */}
-      <div className="text-center mb-8">
-        <h2 className="text-2xl font-bold text-neon-purple mb-2">
-          Network Analytics
-        </h2>
-        <p className="text-muted-foreground">
-          Real-time performance insights and metrics
-        </p>
+    <div className={cn("space-y-6 p-6", className)}>
+      <div className="flex items-center justify-between">
+        <h1 className="text-3xl font-bold text-foreground">Network Analytics</h1>
+        <Badge variant="outline" className="text-neon-cyan border-neon-cyan/50">
+          Real-time Data
+        </Badge>
       </div>
 
-      {/* KPI Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {kpis.map((kpi, index) => (
-          <Card 
-            key={kpi.label}
-            className="glass-card p-6 hover:neon-glow transition-all duration-300 hover:scale-105"
-            style={{ animationDelay: `${index * 100}ms` }}
-          >
-            <div className="flex items-center justify-between mb-4">
-              <div 
-                className="p-2 rounded-xl glass"
-                style={{ 
-                  backgroundColor: `hsl(var(--${kpi.color}) / 0.1)`,
-                  borderColor: `hsl(var(--${kpi.color}) / 0.3)`,
-                }}
-              >
-                <kpi.icon className="w-5 h-5" />
-              </div>
-              
-              <div className="flex items-center gap-1">
-                {kpi.trend === 'up' ? (
-                  <TrendingUp className="w-4 h-4 text-status-success" />
-                ) : kpi.trend === 'down' ? (
-                  <TrendingDown className="w-4 h-4 text-status-error" />
-                ) : (
-                  <Activity className="w-4 h-4 text-muted-foreground" />
-                )}
-                <span 
-                  className={cn(
-                    "text-xs font-medium",
-                    kpi.trend === 'up' && "text-status-success",
-                    kpi.trend === 'down' && "text-status-error",
-                    kpi.trend === 'neutral' && "text-muted-foreground"
-                  )}
-                >
-                  {kpi.change > 0 ? '+' : ''}{kpi.change.toFixed(1)}
-                </span>
-              </div>
+        {/* Network Health */}
+        <Card className="p-6 bg-card/50 backdrop-blur-sm border border-border/50">
+          <div className="flex items-center space-x-4">
+            <div className="p-2 bg-green-500/20 rounded-lg">
+              <Activity className="w-6 h-6 text-green-400" />
             </div>
-            
             <div>
-              <AnimatedCounter value={kpi.value} className="block mb-1" />
-              <p className="text-sm text-muted-foreground">{kpi.label}</p>
-            </div>
-          </Card>
-        ))}
-      </div>
-
-      {/* Detailed Stats */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Packet Breakdown */}
-        <Card className="glass-card p-6">
-          <h3 className="text-lg font-semibold text-neon-green mb-4">
-            Packet Breakdown
-          </h3>
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-status-success" />
-                <span className="text-sm">Delivered</span>
-              </div>
-              <Badge variant="outline" className="bg-status-success/20 text-status-success">
-                {analytics.delivered}
-              </Badge>
-            </div>
-            
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-status-error" />
-                <span className="text-sm">Lost</span>
-              </div>
-              <Badge variant="outline" className="bg-status-error/20 text-status-error">
-                {analytics.lost}
-              </Badge>
-            </div>
-            
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-status-warning" />
-                <span className="text-sm">Corrupted</span>
-              </div>
-              <Badge variant="outline" className="bg-status-warning/20 text-status-warning">
-                {analytics.corrupted}
-              </Badge>
+              <p className="text-sm text-muted-foreground">Network Health</p>
+              <p className="text-2xl font-bold text-foreground">98.5%</p>
             </div>
           </div>
         </Card>
 
-        {/* System Status */}
-        <Card className="glass-card p-6">
-          <h3 className="text-lg font-semibold text-neon-orange mb-4">
-            System Status
-          </h3>
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <span className="text-sm">Network Health</span>
-              <Badge 
-                variant="outline" 
-                className={cn(
-                  analytics.deliveryRate >= 90 
-                    ? "bg-status-success/20 text-status-success"
-                    : analytics.deliveryRate >= 70
-                    ? "bg-status-warning/20 text-status-warning"
-                    : "bg-status-error/20 text-status-error"
-                )}
-              >
-                {analytics.deliveryRate >= 90 ? 'Excellent' 
-                  : analytics.deliveryRate >= 70 ? 'Good' 
-                  : 'Poor'}
-              </Badge>
+        {/* Packet Loss */}
+        <Card className="p-6 bg-card/50 backdrop-blur-sm border border-border/50">
+          <div className="flex items-center space-x-4">
+            <div className="p-2 bg-yellow-500/20 rounded-lg">
+              <AlertTriangle className="w-6 h-6 text-yellow-400" />
             </div>
-            
-            <div className="flex items-center justify-between">
-              <span className="text-sm">Top Failing Node</span>
-              <Badge variant="outline" className="bg-muted/20 text-muted-foreground">
-                {analytics.topFailingNode}
-              </Badge>
+            <div>
+              <p className="text-sm text-muted-foreground">Packet Loss</p>
+              <p className="text-2xl font-bold text-foreground">1.2%</p>
             </div>
-            
-            <div className="flex items-center justify-between">
-              <span className="text-sm">System Uptime</span>
-              <Badge variant="outline" className="bg-neon-blue/20 text-neon-blue">
-                99.9%
-              </Badge>
+          </div>
+        </Card>
+
+        {/* Throughput */}
+        <Card className="p-6 bg-card/50 backdrop-blur-sm border border-border/50">
+          <div className="flex items-center space-x-4">
+            <div className="p-2 bg-blue-500/20 rounded-lg">
+              <TrendingUp className="w-6 h-6 text-blue-400" />
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Throughput</p>
+              <p className="text-2xl font-bold text-foreground">1.2 Gbps</p>
+            </div>
+          </div>
+        </Card>
+
+        {/* Active Sessions */}
+        <Card className="p-6 bg-card/50 backdrop-blur-sm border border-border/50">
+          <div className="flex items-center space-x-4">
+            <div className="p-2 bg-purple-500/20 rounded-lg">
+              <BarChart3 className="w-6 h-6 text-purple-400" />
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Active Sessions</p>
+              <p className="text-2xl font-bold text-foreground">247</p>
+            </div>
+          </div>
+        </Card>
+      </div>
+
+      {/* Analytics Charts Placeholder */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card className="p-6 bg-card/50 backdrop-blur-sm border border-border/50">
+          <h3 className="text-lg font-semibold text-foreground mb-4">Network Traffic</h3>
+          <div className="h-64 flex items-center justify-center text-muted-foreground">
+            <div className="text-center">
+              <BarChart3 className="w-12 h-12 mx-auto mb-2 opacity-50" />
+              <p>Traffic analytics chart would go here</p>
+            </div>
+          </div>
+        </Card>
+
+        <Card className="p-6 bg-card/50 backdrop-blur-sm border border-border/50">
+          <h3 className="text-lg font-semibold text-foreground mb-4">Error Rates</h3>
+          <div className="h-64 flex items-center justify-center text-muted-foreground">
+            <div className="text-center">
+              <AlertTriangle className="w-12 h-12 mx-auto mb-2 opacity-50" />
+              <p>Error rate analytics would go here</p>
             </div>
           </div>
         </Card>

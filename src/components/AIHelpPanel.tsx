@@ -13,9 +13,11 @@ import {
   ChevronUp,
   Lightbulb,
   HelpCircle,
-  Zap
+  Zap,
+  Loader2
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { geminiService } from '@/lib/gemini';
 
 interface AIMessage {
   id: string;
@@ -28,22 +30,35 @@ interface AIHelpPanelProps {
   isExpanded: boolean;
   onToggle: () => void;
   className?: string;
+  logQuery?: string; // For analyzing specific log entries
+  onLogQueryHandled?: () => void; // Callback when log query is processed
 }
 
 export const AIHelpPanel: React.FC<AIHelpPanelProps> = ({ 
   isExpanded, 
   onToggle, 
-  className 
+  className,
+  logQuery,
+  onLogQueryHandled
 }) => {
   const [messages, setMessages] = useState<AIMessage[]>([
     {
       id: '1',
       type: 'ai',
-      content: 'Hello! I\'m your AI network assistant. Ask me anything about network topology, packet routing, or simulation strategies.',
+      content: 'Hello! Ask me anything click on any log entry to get detailed analysis!',
       timestamp: new Date()
     }
   ]);
   const [inputValue, setInputValue] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Handle log query when it changes
+  React.useEffect(() => {
+    if (logQuery && logQuery.trim()) {
+      handleLogAnalysis(logQuery);
+      onLogQueryHandled?.();
+    }
+  }, [logQuery, onLogQueryHandled]);
 
   const suggestions = [
     "How can I reduce packet loss?",
@@ -52,8 +67,47 @@ export const AIHelpPanel: React.FC<AIHelpPanelProps> = ({
     "Help me debug connection issues"
   ];
 
-  const handleSendMessage = () => {
-    if (!inputValue.trim()) return;
+  const handleLogAnalysis = async (logMessage: string) => {
+    if (!logMessage.trim()) return;
+    
+    // Add user message for log analysis
+    const userMessage: AIMessage = {
+      id: Date.now().toString(),
+      type: 'user',
+      content: `Analyze this log entry: "${logMessage}"`,
+      timestamp: new Date()
+    };
+    
+    setMessages(prev => [...prev, userMessage]);
+    setIsLoading(true);
+    
+    try {
+      const analysis = await geminiService.analyzeNetworkError(logMessage);
+      
+      const aiResponse: AIMessage = {
+        id: (Date.now() + 1).toString(),
+        type: 'ai',
+        content: analysis,
+        timestamp: new Date()
+      };
+      
+      setMessages(prev => [...prev, aiResponse]);
+    } catch (error) {
+      const errorResponse: AIMessage = {
+        id: (Date.now() + 1).toString(),
+        type: 'ai',
+        content: 'Sorry, I encountered an error analyzing that log entry. Please make sure the Gemini API key is configured correctly.',
+        timestamp: new Date()
+      };
+      
+      setMessages(prev => [...prev, errorResponse]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSendMessage = async () => {
+    if (!inputValue.trim() || isLoading) return;
 
     const userMessage: AIMessage = {
       id: Date.now().toString(),
@@ -63,18 +117,33 @@ export const AIHelpPanel: React.FC<AIHelpPanelProps> = ({
     };
 
     setMessages(prev => [...prev, userMessage]);
+    const currentInput = inputValue;
     setInputValue('');
+    setIsLoading(true);
 
-    // Simulate AI response
-    setTimeout(() => {
+    try {
+      const response = await geminiService.getNetworkAdvice(currentInput);
+      
       const aiResponse: AIMessage = {
         id: (Date.now() + 1).toString(),
         type: 'ai',
-        content: `I understand you're asking about "${inputValue}". Based on your current network setup, I recommend implementing proper error handling and considering redundant paths for better reliability.`,
+        content: response,
         timestamp: new Date()
       };
+      
       setMessages(prev => [...prev, aiResponse]);
-    }, 1000);
+    } catch (error) {
+      const errorResponse: AIMessage = {
+        id: (Date.now() + 1).toString(),
+        type: 'ai',
+        content: 'Sorry, I encountered an error processing your request. Please make sure the Gemini API key is configured correctly.',
+        timestamp: new Date()
+      };
+      
+      setMessages(prev => [...prev, errorResponse]);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -86,7 +155,7 @@ export const AIHelpPanel: React.FC<AIHelpPanelProps> = ({
           className="fixed bottom-6 right-6 w-14 h-14 rounded-full glass-card neon-glow-blue hover:scale-110 transition-all duration-300 z-50"
           size="icon"
         >
-          <Bot className="w-6 h-6" />
+          <Bot className="w-6 h-6 text-white" />
         </Button>
       )}
 
@@ -97,7 +166,7 @@ export const AIHelpPanel: React.FC<AIHelpPanelProps> = ({
           <div className="p-4 border-b border-border/50 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-full glass-card flex items-center justify-center neon-glow">
-                <Bot className="w-4 h-4 text-neon-blue" />
+                <Bot className="w-4 h-4 text-white" />
               </div>
               <div>
                 <h3 className="font-semibold text-foreground">AI Assistant</h3>
@@ -111,19 +180,19 @@ export const AIHelpPanel: React.FC<AIHelpPanelProps> = ({
               onClick={onToggle}
               className="h-8 w-8 p-0 hover:bg-background/50"
             >
-              <ChevronDown className="w-4 h-4" />
+              <ChevronDown className="w-4 h-4 text-white" />
             </Button>
           </div>
 
           {/* Quick Actions */}
           <div className="p-4 border-b border-border/50">
             <div className="grid grid-cols-2 gap-2">
-              <Button variant="outline" size="sm" className="justify-start text-xs glass-card">
-                <Lightbulb className="w-3 h-3 mr-1.5" />
+              <Button variant="outline" size="sm" className="justify-start text-xs glass-card text-white">
+                <Lightbulb className="w-3 h-3 mr-1.5 text-white" />
                 Tips
               </Button>
-              <Button variant="outline" size="sm" className="justify-start text-xs glass-card">
-                <HelpCircle className="w-3 h-3 mr-1.5" />
+              <Button variant="outline" size="sm" className="justify-start text-xs glass-card text-white">
+                <HelpCircle className="w-3 h-3 mr-1.5 text-white" />
                 Help
               </Button>
             </div>
@@ -197,11 +266,15 @@ export const AIHelpPanel: React.FC<AIHelpPanelProps> = ({
               />
               <Button
                 onClick={handleSendMessage}
-                disabled={!inputValue.trim()}
+                disabled={!inputValue.trim() || isLoading}
                 className="neon-glow-blue hover:scale-105 transition-all duration-300"
                 size="icon"
               >
-                <Send className="w-4 h-4" />
+                {isLoading ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Send className="w-4 h-4" />
+                )}
               </Button>
             </div>
           </div>

@@ -30,7 +30,9 @@ interface Node {
   id: string;
   label: string;
   active: boolean;
-  type: 'server' | 'client' | 'router' | 'switch' | 'host';
+  type: 'node';
+  isSource?: boolean;
+  isDestination?: boolean;
 }
 
 interface CustomMessage {
@@ -184,10 +186,9 @@ export const CustomMessagePanel: React.FC<CustomMessagePanelProps> = ({
                       <div className="flex items-center gap-2">
                         <div className={cn(
                           "w-2 h-2 rounded-full",
-                          node.type === 'server' ? 'bg-neon-blue' :
-                          node.type === 'router' ? 'bg-neon-purple' :
-                          node.type === 'switch' ? 'bg-neon-green' :
-                          'bg-neon-cyan'
+                          node.isSource ? 'bg-neon-green' :
+                          node.isDestination ? 'bg-neon-purple' :
+                          'bg-neon-blue'
                         )} />
                         {node.label}
                       </div>
@@ -209,10 +210,9 @@ export const CustomMessagePanel: React.FC<CustomMessagePanelProps> = ({
                       <div className="flex items-center gap-2">
                         <div className={cn(
                           "w-2 h-2 rounded-full",
-                          node.type === 'server' ? 'bg-neon-blue' :
-                          node.type === 'router' ? 'bg-neon-purple' :
-                          node.type === 'switch' ? 'bg-neon-green' :
-                          'bg-neon-cyan'
+                          node.isSource ? 'bg-neon-green' :
+                          node.isDestination ? 'bg-neon-purple' :
+                          'bg-neon-blue'
                         )} />
                         {node.label}
                       </div>

@@ -52,6 +52,7 @@ export default {
           green: "hsl(var(--neon-green))",
           purple: "hsl(var(--neon-purple))",
           cyan: "hsl(var(--neon-cyan))",
+          yellow: "hsl(var(--neon-yellow))",
           orange: "hsl(var(--neon-orange))",
         },
         status: {
