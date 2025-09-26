@@ -31,8 +31,8 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
   activeNodes,
 }) => {
   return (
-    <Card className="glass-card p-6 w-80 h-full overflow-y-auto">
-      <div className="space-y-6">
+    <div className="h-full overflow-y-auto">
+      <div className="space-y-6 p-6">
         {/* Header */}
         <div className="text-center">
           <h2 className="text-xl font-bold text-neon-blue mb-2">Network Control</h2>
@@ -179,6 +179,6 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
           </div>
         </div>
       </div>
-    </Card>
+    </div>
   );
 };

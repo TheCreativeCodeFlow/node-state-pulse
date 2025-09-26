@@ -2,17 +2,47 @@ import React, { useState } from 'react';
 import { Dashboard } from '@/components/Dashboard';
 import { SimulatorLayout } from '@/components/SimulatorLayout';
 import { AnalyticsDashboard } from '@/components/AnalyticsDashboard';
+import { SessionSelector } from '@/components/SessionSelector';
+import { SimpleSessionSelector } from '@/components/SimpleSessionSelector';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Activity, BarChart3, FileText } from 'lucide-react';
 
 const Index = () => {
-  const [currentView, setCurrentView] = useState<'dashboard' | 'simulator' | 'tabs'>('dashboard');
+  const [currentView, setCurrentView] = useState<'session' | 'dashboard' | 'simulator' | 'tabs'>('session');
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+
+  const handleSessionSelected = (sessionId: string) => {
+    setCurrentSessionId(sessionId);
+    setCurrentView('dashboard');
+  };
+
+  const handleBackToSessions = () => {
+    setCurrentView('session');
+    setCurrentSessionId(null);
+  };
+
+  if (currentView === 'session') {
+    return (
+      <div className="h-screen w-full flex items-center justify-center bg-background p-6">
+        <div className="w-full max-w-md">
+          <SimpleSessionSelector onSessionSelected={handleSessionSelected} />
+        </div>
+      </div>
+    );
+  }
+
   if (currentView === 'dashboard') {
-    return <Dashboard onStartSimulation={() => setCurrentView('simulator')} />;
+    return <Dashboard onStartSimulation={() => setCurrentView('simulator')} onBackToSessions={handleBackToSessions} />;
   }
 
   if (currentView === 'simulator') {
-    return <SimulatorLayout onBackToDashboard={() => setCurrentView('dashboard')} />;
+    return (
+      <SimulatorLayout 
+        sessionId={currentSessionId} 
+        onBackToDashboard={() => setCurrentView('dashboard')} 
+        onBackToSessions={handleBackToSessions}
+      />
+    );
   }
 
   // Legacy tab-based view (kept for reference)

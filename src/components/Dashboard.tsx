@@ -16,9 +16,10 @@ import {
 
 interface DashboardProps {
   onStartSimulation: () => void;
+  onBackToSessions?: () => void;
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ onStartSimulation }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ onStartSimulation, onBackToSessions }) => {
   const features = [
     {
       icon: Network,
@@ -57,9 +58,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartSimulation }) => {
   ];
 
   return (
-    <div className="min-h-screen w-full bg-background relative overflow-hidden">
-      {/* Animated Background */}
-      <div className="absolute inset-0 opacity-5">
+    <div className="h-screen w-full bg-background relative overflow-hidden">
+      {/* Scrollable Container */}
+      <div className="h-full overflow-y-auto">
+        {/* Animated Background */}
+        <div className="absolute inset-0 opacity-5">
         <div 
           className="w-full h-full animate-pulse"
           style={{
@@ -80,15 +83,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartSimulation }) => {
       <div className="absolute bottom-20 right-20 w-48 h-48 bg-neon-green/10 rounded-full blur-xl animate-float-delayed" />
       <div className="absolute top-1/2 left-1/2 w-24 h-24 bg-neon-purple/10 rounded-full blur-xl animate-bounce-slow" />
 
-      <div className="relative z-10 container mx-auto px-6 py-12">
+      <div className="relative z-10 container mx-auto px-6 py-8 md:py-12 pb-20 md:pb-24">
         {/* Header */}
-        <div className="text-center mb-16 animate-fade-in">
+        <div className="text-center mb-8 md:mb-16 animate-fade-in">
           <Badge className="mb-4 px-4 py-2 glass-card border-neon-blue/30 text-neon-blue">
             <Sparkles className="w-4 h-4 mr-2" />
             NetLab Explorer v2.0
           </Badge>
           
-          <h1 className="text-6xl font-bold mb-6 bg-gradient-to-r from-neon-blue via-neon-green to-neon-purple bg-clip-text text-transparent">
+          <h1 className="text-4xl md:text-6xl font-bold mb-6 bg-gradient-to-r from-neon-blue via-neon-green to-neon-purple bg-clip-text text-transparent">
             Interactive Network
             <br />
             Simulation Platform
@@ -99,30 +102,42 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartSimulation }) => {
             complex network topologies with real-time packet analysis.
           </p>
 
-          <div className="flex items-center justify-center gap-4">
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <Button 
               size="lg" 
               onClick={onStartSimulation}
-              className="group h-14 px-8 glass-card neon-glow-blue hover:scale-105 transition-all duration-300"
+              className="group h-14 px-8 glass-card neon-glow-green hover:scale-105 transition-all duration-300 w-full sm:w-auto bg-neon-green/20 border border-neon-green/50 text-neon-green hover:bg-neon-green/30"
             >
               <Play className="w-5 h-5 mr-2 group-hover:scale-110 transition-transform" />
               Start Simulation
               <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
             </Button>
             
-            <Button 
-              variant="outline" 
-              size="lg"
-              className="h-14 px-8 glass-card border-border/50 hover:border-neon-blue/50 hover:scale-105 transition-all duration-300"
-            >
-              <Users className="w-5 h-5 mr-2" />
-              Join Community
-            </Button>
+            {onBackToSessions ? (
+              <Button 
+                variant="outline" 
+                size="lg"
+                onClick={onBackToSessions}
+                className="h-14 px-8 glass-card border-border/50 hover:border-neon-blue/50 hover:scale-105 transition-all duration-300 w-full sm:w-auto"
+              >
+                <Users className="w-5 h-5 mr-2" />
+                Change Session
+              </Button>
+            ) : (
+              <Button 
+                variant="outline" 
+                size="lg"
+                className="h-14 px-8 glass-card border-border/50 hover:border-neon-blue/50 hover:scale-105 transition-all duration-300 w-full sm:w-auto"
+              >
+                <Users className="w-5 h-5 mr-2" />
+                Join Community
+              </Button>
+            )}
           </div>
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-16">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 mb-8 md:mb-16">
           {stats.map((stat, index) => (
             <Card 
               key={stat.label}
@@ -137,7 +152,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartSimulation }) => {
         </div>
 
         {/* Feature Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-16">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mb-8 md:mb-16">
           {features.map((feature, index) => {
             const IconComponent = feature.icon;
             return (
@@ -178,8 +193,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartSimulation }) => {
 
         {/* CTA Section */}
         <div className="text-center animate-fade-in">
-          <div className="glass-card p-8 rounded-3xl max-w-4xl mx-auto">
-            <h2 className="text-3xl font-bold mb-4 text-foreground">
+          <div className="glass-card p-6 md:p-8 rounded-3xl max-w-4xl mx-auto">
+            <h2 className="text-2xl md:text-3xl font-bold mb-4 text-foreground">
               Ready to explore the future of network learning?
             </h2>
             <p className="text-muted-foreground mb-6 max-w-2xl mx-auto">
@@ -189,13 +204,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartSimulation }) => {
             <Button 
               size="lg"
               onClick={onStartSimulation}
-              className="group h-12 px-6 neon-glow-green hover:scale-105 transition-all duration-300"
+              className="group h-12 px-6 neon-glow-green hover:scale-105 transition-all duration-300 bg-neon-green/20 border border-neon-green/50 text-neon-green hover:bg-neon-green/30"
             >
               <Play className="w-4 h-4 mr-2 group-hover:scale-110 transition-transform" />
               Launch NetLab Explorer
             </Button>
           </div>
         </div>
+      </div>
       </div>
     </div>
   );

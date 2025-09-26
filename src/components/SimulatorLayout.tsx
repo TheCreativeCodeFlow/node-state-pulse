@@ -11,65 +11,90 @@ import {
   RotateCw, 
   Settings,
   PanelLeftOpen,
-  PanelRightOpen
+  PanelRightOpen,
+  Wifi,
+  WifiOff
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { useNetworkSimulation } from '@/hooks/useNetworkSimulation';
+import { useWebSocket } from '@/hooks/useWebSocket';
+import { ConnectionStatus } from '@/components/ConnectionStatus';
+import { CustomMessagePanel } from '@/components/CustomMessagePanel';
+import { NodeResponse, ConnectionResponse } from '@/types/api';
 
 interface SimulatorLayoutProps {
+  sessionId: string | null;
   onBackToDashboard: () => void;
+  onBackToSessions?: () => void;
 }
 
 export const SimulatorLayout: React.FC<SimulatorLayoutProps> = ({ 
-  onBackToDashboard 
+  sessionId,
+  onBackToDashboard,
+  onBackToSessions
 }) => {
-  // Network state
-  const [nodes, setNodes] = useState<Node[]>([]);
-  const [edges, setEdges] = useState<Edge[]>([]);
+  // Backend hooks
+  const networkSim = useNetworkSimulation(sessionId);
+  const webSocket = useWebSocket();
+
+  // Local UI state
   const [packets, setPackets] = useState<Packet[]>([]);
   const [logs, setLogs] = useState<LogEntry[]>([]);
-
-  // UI state
   const [mode, setMode] = useState<SimulationMode>('select');
   const [leftPanelCollapsed, setLeftPanelCollapsed] = useState(false);
   const [rightPanelCollapsed, setRightPanelCollapsed] = useState(false);
   const [aiHelpExpanded, setAiHelpExpanded] = useState(false);
 
-  // Control panel state
+  // Control panel state (for anomaly creation)
   const [packetLoss, setPacketLoss] = useState(10);
   const [corruption, setCorruption] = useState(5);
   const [latency, setLatency] = useState(100);
 
-  // History for undo/redo
-  const [history, setHistory] = useState<{ nodes: Node[], edges: Edge[] }[]>([]);
-  const [historyIndex, setHistoryIndex] = useState(-1);
+  // Convert backend data to UI format
+  const nodes: Node[] = networkSim.nodes.map(node => ({
+    id: node.id.toString(),
+    x: node.x_position,
+    y: node.y_position,
+    type: node.node_type as Node['type'],
+    active: node.status === 'active',
+    label: node.name,
+  }));
+
+  const edges: Edge[] = networkSim.connections.map(conn => ({
+    id: conn.id.toString(),
+    sourceId: conn.source_node_id.toString(),
+    targetId: conn.destination_node_id.toString(),
+  }));
 
   const generateId = () => Math.random().toString(36).substr(2, 9);
 
+  // Connect to WebSocket when sessionId changes
+  useEffect(() => {
+    if (sessionId && !webSocket.isConnected) {
+      webSocket.connect(sessionId).catch(console.error);
+    }
+
+    return () => {
+      if (webSocket.isConnected) {
+        webSocket.disconnect();
+      }
+    };
+  }, [sessionId, webSocket]);
+
   // Add initial welcome log
   useEffect(() => {
-    addLog('packet_sent', 'NetLab Explorer initialized - Ready for simulation');
-    saveToHistory();
-  }, []);
+    if (sessionId) {
+      addLog('packet_sent', 'NetLab Explorer connected to backend - Ready for simulation');
+    }
+  }, [sessionId]);
 
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyPress = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey) {
-        switch (e.key) {
-          case 'z':
-            e.preventDefault();
-            if (e.shiftKey) {
-              redo();
-            } else {
-              undo();
-            }
-            break;
-          case 'y':
-            e.preventDefault();
-            redo();
-            break;
-        }
+        // Backend handles undo/redo, we can implement later
+        return;
       } else {
         switch (e.key.toLowerCase()) {
           case 'v':
@@ -90,36 +115,69 @@ export const SimulatorLayout: React.FC<SimulatorLayoutProps> = ({
 
     window.addEventListener('keydown', handleKeyPress);
     return () => window.removeEventListener('keydown', handleKeyPress);
-  }, [historyIndex, history.length]);
+  }, []);
 
-  const saveToHistory = useCallback(() => {
-    setHistory(prev => {
-      const newHistory = prev.slice(0, historyIndex + 1);
-      newHistory.push({ nodes, edges });
-      return newHistory.slice(-50); // Keep last 50 states
-    });
-    setHistoryIndex(prev => Math.min(prev + 1, 49));
-  }, [nodes, edges, historyIndex]);
+  // WebSocket event handlers
+  useEffect(() => {
+    const handlePacketEvent = (event: any) => {
+      addLog(
+        event.event_type as LogEntry['type'],
+        event.data.message || `${event.event_type.replace('_', ' ')} event`,
+        event.data.node_id?.toString(),
+        event.data.packet_id?.toString()
+      );
 
-  const undo = useCallback(() => {
-    if (historyIndex > 0) {
-      const prevState = history[historyIndex - 1];
-      setNodes(prevState.nodes);
-      setEdges(prevState.edges);
-      setHistoryIndex(prev => prev - 1);
-      toast.success('Undone');
-    }
-  }, [history, historyIndex]);
+      // Handle packet visualization
+      if (event.event_type === 'packet_sent' && event.data.packet) {
+        const packet: Packet = {
+          id: event.data.packet.id.toString(),
+          sourceId: event.data.packet.source_node_id.toString(),
+          targetId: event.data.packet.destination_node_id.toString(),
+          progress: 0,
+          status: 'traveling',
+        };
+        setPackets(prev => [...prev, packet]);
+      }
+    };
 
-  const redo = useCallback(() => {
-    if (historyIndex < history.length - 1) {
-      const nextState = history[historyIndex + 1];
-      setNodes(nextState.nodes);
-      setEdges(nextState.edges);
-      setHistoryIndex(prev => prev + 1);
-      toast.success('Redone');
-    }
-  }, [history, historyIndex]);
+    const handleSimulationEvent = (event: any) => {
+      addLog(
+        event.event_type as LogEntry['type'],
+        event.data.message || `Simulation ${event.event_type.replace('simulation_', '')}`,
+      );
+    };
+
+    // Register packet event handlers
+    webSocket.on('packet_sent', handlePacketEvent);
+    webSocket.on('packet_delivered', handlePacketEvent);
+    webSocket.on('packet_lost', handlePacketEvent);
+    webSocket.on('packet_delayed', handlePacketEvent);
+    webSocket.on('packet_failed', handlePacketEvent);
+    
+    // Register simulation event handlers
+    webSocket.on('simulation_started', handleSimulationEvent);
+    webSocket.on('simulation_completed', handleSimulationEvent);
+    webSocket.on('simulation_error', handleSimulationEvent);
+    
+    // Register log event handlers
+    webSocket.on('log_info', handlePacketEvent);
+    webSocket.on('log_warning', handlePacketEvent);
+    webSocket.on('log_error', handlePacketEvent);
+
+    return () => {
+      webSocket.off('packet_sent');
+      webSocket.off('packet_delivered');
+      webSocket.off('packet_lost');
+      webSocket.off('packet_delayed');
+      webSocket.off('packet_failed');
+      webSocket.off('simulation_started');
+      webSocket.off('simulation_completed');
+      webSocket.off('simulation_error');
+      webSocket.off('log_info');
+      webSocket.off('log_warning');
+      webSocket.off('log_error');
+    };
+  }, [webSocket]);
 
   const addLog = useCallback((
     type: LogEntry['type'], 
@@ -138,57 +196,59 @@ export const SimulatorLayout: React.FC<SimulatorLayoutProps> = ({
     setLogs(prev => [...prev, newLog]);
   }, []);
 
-  const handleNodeUpdate = useCallback((updatedNode: Node) => {
-    setNodes(prev => prev.map(node => 
-      node.id === updatedNode.id ? updatedNode : node
-    ));
-  }, []);
+  const handleNodeUpdate = useCallback(async (updatedNode: Node) => {
+    if (!sessionId) return;
+    
+    const nodeId = parseInt(updatedNode.id);
+    await networkSim.updateNode(nodeId, {
+      x_position: updatedNode.x,
+      y_position: updatedNode.y,
+      status: updatedNode.active ? 'active' : 'inactive',
+    });
+  }, [networkSim, sessionId]);
 
-  const handleNodeCreate = useCallback((x: number, y: number) => {
-    if (mode !== 'add') return;
+  const handleNodeCreate = useCallback(async (x: number, y: number) => {
+    if (mode !== 'add' || !sessionId) return;
 
-    const nodeTypes: Node['type'][] = ['server', 'client', 'router'];
+    const nodeTypes = ['router', 'switch', 'host', 'server'] as const;
     const randomType = nodeTypes[Math.floor(Math.random() * nodeTypes.length)];
     
-    const newNode: Node = {
-      id: `node_${generateId()}`,
-      x,
-      y,
-      type: randomType,
-      active: true,
-      label: `${randomType}_${nodes.length + 1}`,
-    };
+    const newNode = await networkSim.createNode({
+      name: `${randomType}_${nodes.length + 1}`,
+      node_type: randomType,
+      x_position: x,
+      y_position: y,
+    });
 
-    setNodes(prev => [...prev, newNode]);
-    
-    // Auto-connect to nearest node if exists
-    if (nodes.length > 0) {
-      const nearestNode = nodes.reduce((nearest, node) => {
-        const distance = Math.sqrt(
-          Math.pow(node.x - x, 2) + Math.pow(node.y - y, 2)
-        );
-        const nearestDistance = Math.sqrt(
-          Math.pow(nearest.x - x, 2) + Math.pow(nearest.y - y, 2)
-        );
-        return distance < nearestDistance ? node : nearest;
-      });
+    if (newNode) {
+      addLog('packet_sent', `Created new ${randomType} node: ${newNode.name}`, newNode.id.toString());
+      
+      // Auto-connect to nearest node if exists
+      if (nodes.length > 0) {
+        const nearestNode = nodes.reduce((nearest, node) => {
+          const distance = Math.sqrt(
+            Math.pow(node.x - x, 2) + Math.pow(node.y - y, 2)
+          );
+          const nearestDistance = Math.sqrt(
+            Math.pow(nearest.x - x, 2) + Math.pow(nearest.y - y, 2)
+          );
+          return distance < nearestDistance ? node : nearest;
+        });
 
-      const newEdge: Edge = {
-        id: `edge_${generateId()}`,
-        sourceId: nearestNode.id,
-        targetId: newNode.id,
-      };
+        await networkSim.createConnection({
+          source_node_id: parseInt(nearestNode.id),
+          destination_node_id: newNode.id,
+          bandwidth_mbps: 100,
+          latency_ms: 10,
+        });
 
-      setEdges(prev => [...prev, newEdge]);
+        addLog('packet_sent', `Connected ${newNode.name} to ${nearestNode.label}`);
+      }
     }
+  }, [nodes, addLog, mode, networkSim, sessionId]);
 
-    addLog('packet_sent', `Created new ${randomType} node: ${newNode.label}`, newNode.id);
-    toast.success(`Created ${randomType} node`);
-    saveToHistory();
-  }, [nodes, addLog, mode, saveToHistory]);
-
-  const handleSendPacket = useCallback(() => {
-    if (nodes.length < 2) {
+  const handleSendPacket = useCallback(async () => {
+    if (!sessionId || nodes.length < 2) {
       toast.error('Need at least 2 nodes to send packets');
       return;
     }
@@ -206,85 +266,89 @@ export const SimulatorLayout: React.FC<SimulatorLayoutProps> = ({
       targetNode = activeNodes[Math.floor(Math.random() * activeNodes.length)];
     }
 
-    const newPacket: Packet = {
-      id: `packet_${generateId()}`,
-      sourceId: sourceNode.id,
-      targetId: targetNode.id,
-      progress: 0,
-      status: 'traveling',
-    };
+    // Create message via backend
+    const message = await networkSim.createMessage({
+      source_node_id: parseInt(sourceNode.id),
+      destination_node_id: parseInt(targetNode.id),
+      message_type: 'data',
+      content: 'Test packet',
+      packet_size_bytes: 1024,
+    });
 
-    setPackets(prev => [...prev, newPacket]);
-    addLog('packet_sent', 
-      `Packet sent from ${sourceNode.label} to ${targetNode.label}`, 
-      sourceNode.id, 
-      newPacket.id
+    if (message) {
+      addLog('packet_sent', 
+        `Message created from ${sourceNode.label} to ${targetNode.label}`, 
+        sourceNode.id, 
+        message.id.toString()
+      );
+
+      // Start simulation with the message
+      await networkSim.startSimulation({
+        message_ids: [message.id],
+        enable_anomalies: true,
+        speed_multiplier: 1.0,
+      });
+
+      toast.success('Message sent and simulation started!');
+    }
+  }, [nodes, networkSim, sessionId, addLog]);
+
+  const handleToggleNode = useCallback(async (nodeId: string) => {
+    if (!sessionId) return;
+    
+    const node = nodes.find(n => n.id === nodeId);
+    if (!node) return;
+
+    const newStatus = node.active ? 'inactive' : 'active';
+    
+    await networkSim.updateNode(parseInt(nodeId), {
+      status: newStatus as 'active' | 'inactive',
+    });
+
+    addLog(
+      newStatus === 'active' ? 'node_recovered' : 'node_failed',
+      `Node ${node.label} ${newStatus === 'active' ? 'recovered' : 'failed'}`,
+      nodeId
     );
+  }, [nodes, networkSim, sessionId, addLog]);
 
-    // Simulate packet journey with enhanced animations
-    const animatePacket = () => {
-      setPackets(prev => prev.map(packet => {
-        if (packet.id !== newPacket.id) return packet;
+  const handleSendCustomMessage = useCallback(async (messageData: {
+    sourceId: string;
+    targetId: string;
+    content: string;
+    messageType: 'data' | 'control' | 'broadcast';
+    priority: number;
+    packetSize: number;
+  }) => {
+    if (!sessionId) return;
 
-        const newProgress = packet.progress + 0.015;
-        
-        if (newProgress >= 1) {
-          const random = Math.random() * 100;
-          let status: Packet['status'] = 'delivered';
-          let message = `Packet delivered successfully to ${targetNode.label}`;
-          
-          if (random < packetLoss) {
-            status = 'lost';
-            message = `Packet lost in transit to ${targetNode.label}`;
-          } else if (random < packetLoss + corruption) {
-            status = 'corrupted';
-            message = `Packet corrupted during transmission to ${targetNode.label}`;
-          } else if (!targetNode.active) {
-            status = 'failed';
-            message = `Packet failed - target node ${targetNode.label} is down`;
-          }
+    const message = await networkSim.createMessage({
+      source_node_id: parseInt(messageData.sourceId),
+      destination_node_id: parseInt(messageData.targetId),
+      message_type: messageData.messageType,
+      content: messageData.content,
+      packet_size_bytes: messageData.packetSize,
+      priority: messageData.priority,
+    });
 
-          addLog(
-            status === 'delivered' ? 'packet_delivered' :
-            status === 'lost' ? 'packet_lost' :
-            status === 'corrupted' ? 'packet_corrupted' : 'packet_lost',
-            message,
-            targetNode.id,
-            packet.id
-          );
+    if (message) {
+      const sourceNode = nodes.find(n => n.id === messageData.sourceId);
+      const targetNode = nodes.find(n => n.id === messageData.targetId);
+      
+      addLog('packet_sent', 
+        `Custom message sent from ${sourceNode?.label} to ${targetNode?.label}: "${messageData.content}"`, 
+        messageData.sourceId, 
+        message.id.toString()
+      );
 
-          setTimeout(() => {
-            setPackets(prev => prev.filter(p => p.id !== packet.id));
-          }, 1500);
-
-          return { ...packet, progress: 1, status };
-        }
-
-        return { ...packet, progress: newProgress };
-      }));
-    };
-
-    const interval = setInterval(animatePacket, latency / 60);
-    setTimeout(() => clearInterval(interval), latency + 1500);
-
-    toast.success('Packet sent!');
-  }, [nodes, packetLoss, corruption, latency, addLog]);
-
-  const handleToggleNode = useCallback((nodeId: string) => {
-    setNodes(prev => prev.map(node => {
-      if (node.id === nodeId) {
-        const newActiveState = !node.active;
-        addLog(
-          newActiveState ? 'node_recovered' : 'node_failed',
-          `Node ${node.label} ${newActiveState ? 'recovered' : 'failed'}`,
-          nodeId
-        );
-        return { ...node, active: newActiveState };
-      }
-      return node;
-    }));
-    saveToHistory();
-  }, [addLog, saveToHistory]);
+      // Start simulation with the custom message
+      await networkSim.startSimulation({
+        message_ids: [message.id],
+        enable_anomalies: true,
+        speed_multiplier: 1.0,
+      });
+    }
+  }, [nodes, networkSim, sessionId, addLog]);
 
   const handleLogClick = useCallback((log: LogEntry) => {
     if (log.nodeId) {
@@ -300,8 +364,8 @@ export const SimulatorLayout: React.FC<SimulatorLayoutProps> = ({
     <div className="h-screen w-full flex bg-background">
       {/* Left Panel - Controls */}
       <div className={cn(
-        "border-r border-border/50 transition-all duration-300 flex flex-col",
-        leftPanelCollapsed ? "w-16" : "w-80"
+        "border-r border-border/50 transition-all duration-300 flex flex-col min-h-0",
+        leftPanelCollapsed ? "w-16" : "w-96"
       )}>
         {/* Panel Header */}
         <div className="p-4 border-b border-border/50 flex items-center justify-between">
@@ -316,6 +380,16 @@ export const SimulatorLayout: React.FC<SimulatorLayoutProps> = ({
                 <ArrowLeft className="w-4 h-4" />
               </Button>
               <h1 className="font-semibold text-foreground">NetLab Explorer</h1>
+              {onBackToSessions && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={onBackToSessions}
+                  className="ml-auto text-xs"
+                >
+                  Change Session
+                </Button>
+              )}
             </div>
           )}
           
@@ -330,52 +404,51 @@ export const SimulatorLayout: React.FC<SimulatorLayoutProps> = ({
         </div>
 
         {/* Panel Content */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto min-h-0">
           {!leftPanelCollapsed ? (
-            <div className="p-4 space-y-6">
-              {/* Mode Selector */}
-              <ModeSelector mode={mode} onModeChange={setMode} />
+            <div className="flex flex-col h-full">
+              {/* Mode Selector - Fixed */}
+              <div className="p-4 border-b border-border/50">
+                <ModeSelector mode={mode} onModeChange={setMode} />
+              </div>
               
-              {/* Control Panel */}
-              <ControlPanel
-                packetLoss={packetLoss}
-                corruption={corruption}
-                latency={latency}
-                onPacketLossChange={setPacketLoss}
-                onCorruptionChange={setCorruption}
-                onLatencyChange={setLatency}
-                onSendPacket={handleSendPacket}
-                onToggleNode={handleToggleNode}
-                activeNodes={nodes.map(node => node.id)}
-              />
+              {/* Scrollable Content */}
+              <div className="flex-1 overflow-y-auto">
+                <div className="p-4 space-y-6">
+                  {/* Control Panel */}
+                  <ControlPanel
+                    packetLoss={packetLoss}
+                    corruption={corruption}
+                    latency={latency}
+                    onPacketLossChange={setPacketLoss}
+                    onCorruptionChange={setCorruption}
+                    onLatencyChange={setLatency}
+                    onSendPacket={handleSendPacket}
+                    onToggleNode={handleToggleNode}
+                    activeNodes={nodes.map(node => node.id)}
+                  />
 
-              {/* History Controls */}
-              <div className="glass-card p-4 rounded-2xl">
-                <h3 className="font-semibold text-foreground mb-3 flex items-center gap-2">
-                  <Settings className="w-4 h-4" />
-                  History
-                </h3>
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={undo}
-                    disabled={historyIndex <= 0}
-                    className="flex-1 glass-card"
-                  >
-                    <RotateCcw className="w-3 h-3 mr-1" />
-                    Undo
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={redo}
-                    disabled={historyIndex >= history.length - 1}
-                    className="flex-1 glass-card"
-                  >
-                    <RotateCw className="w-3 h-3 mr-1" />
-                    Redo
-                  </Button>
+                  {/* Custom Message Panel */}
+                  <CustomMessagePanel
+                    nodes={nodes}
+                    onSendMessage={handleSendCustomMessage}
+                    isLoading={networkSim.isLoading}
+                  />
+
+                  {/* Connection Status */}
+                  <ConnectionStatus
+                    isBackendConnected={!networkSim.error}
+                    isWebSocketConnected={webSocket.isConnected}
+                    isLoading={networkSim.isLoading}
+                    error={networkSim.error}
+                    sessionId={sessionId}
+                    onRetry={() => {
+                      networkSim.refreshAll();
+                      if (sessionId && !webSocket.isConnected) {
+                        webSocket.connect(sessionId);
+                      }
+                    }}
+                  />
                 </div>
               </div>
             </div>
@@ -408,7 +481,7 @@ export const SimulatorLayout: React.FC<SimulatorLayoutProps> = ({
 
       {/* Right Panel - Logs & AI */}
       <div className={cn(
-        "border-l border-border/50 transition-all duration-300 flex flex-col",
+        "border-l border-border/50 transition-all duration-300 flex flex-col min-h-0",
         rightPanelCollapsed ? "w-16" : "w-96"
       )}>
         {/* Panel Header */}
@@ -428,12 +501,12 @@ export const SimulatorLayout: React.FC<SimulatorLayoutProps> = ({
         </div>
 
         {/* Panel Content */}
-        <div className="flex-1 flex flex-col">
+        <div className="flex-1 flex flex-col min-h-0">
           {!rightPanelCollapsed ? (
             <>
               {/* Logs Section */}
               <div className={cn(
-                "transition-all duration-300",
+                "transition-all duration-300 min-h-0",
                 aiHelpExpanded ? "h-1/2" : "flex-1"
               )}>
                 <LogPanel logs={logs} onLogClick={handleLogClick} />
@@ -441,7 +514,7 @@ export const SimulatorLayout: React.FC<SimulatorLayoutProps> = ({
 
               {/* AI Help Section */}
               <div className={cn(
-                "transition-all duration-300",
+                "transition-all duration-300 border-t border-border/50",
                 aiHelpExpanded ? "h-1/2" : "h-auto"
               )}>
                 <AIHelpPanel
