@@ -5,16 +5,21 @@ import { ControlPanel } from './ControlPanel';
 import { LogPanel, LogEntry } from './LogPanel';
 import { ModeSelector, SimulationMode } from './ModeSelector';
 import { AIHelpPanel } from './AIHelpPanel';
+import { AIChatbot } from './AIChatbot';
 import { 
   ArrowLeft, 
   RotateCcw, 
   RotateCw, 
   Settings,
   PanelLeftOpen,
-  PanelRightOpen
+  PanelRightOpen,
+  MessageCircle,
+  Brain
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { apiService } from '@/services/apiService';
+import { webSocketService } from '@/services/webSocketService';
 
 interface SimulatorLayoutProps {
   onBackToDashboard: () => void;
@@ -34,6 +39,11 @@ export const SimulatorLayout: React.FC<SimulatorLayoutProps> = ({
   const [leftPanelCollapsed, setLeftPanelCollapsed] = useState(false);
   const [rightPanelCollapsed, setRightPanelCollapsed] = useState(false);
   const [aiHelpExpanded, setAiHelpExpanded] = useState(false);
+  const [aiChatbotOpen, setAiChatbotOpen] = useState(false);
+  
+  // Session and user state
+  const [sessionId] = useState(() => `session-${Date.now()}`);
+  const [studentId] = useState(() => `student-${Math.random().toString(36).substr(2, 9)}`);
 
   // Control panel state
   const [packetLoss, setPacketLoss] = useState(10);
@@ -46,10 +56,68 @@ export const SimulatorLayout: React.FC<SimulatorLayoutProps> = ({
 
   const generateId = () => Math.random().toString(36).substr(2, 9);
 
-  // Add initial welcome log
+  // Initialize session and WebSocket connection
   useEffect(() => {
-    addLog('packet_sent', 'NetLab Explorer initialized - Ready for simulation');
+    const initializeSession = async () => {
+      try {
+        // Create a new session
+        const session = await apiService.createSession(studentId, {
+          sessionName: `Network Lab - ${new Date().toLocaleString()}`,
+          description: 'Interactive network simulation session'
+        });
+        
+        addLog('packet_sent', `Session created: ${session.sessionName}`);
+        
+        // Connect to WebSocket
+        await webSocketService.connect();
+        
+        // Subscribe to session events
+        webSocketService.onPacketEvent(sessionId, (event) => {
+          // Map event types to LogEntry types
+          let logType: LogEntry['type'] = 'packet_sent';
+          if (event.eventType === 'packet_sent') logType = 'packet_sent';
+          else if (event.eventType === 'delivered') logType = 'packet_delivered';
+          else if (event.eventType === 'packet_lost') logType = 'packet_lost';
+          else if (event.eventType === 'packet_corrupted') logType = 'packet_corrupted';
+          
+          addLog(logType, event.description);
+          
+          // Update packets based on event
+          if (event.eventType === 'packet_sent') {
+            setPackets(prev => [...prev, {
+              id: event.packetId,
+              sourceId: event.sourceNodeId,
+              targetId: event.targetNodeId,
+              progress: 0,
+              status: 'traveling'
+            }]);
+          } else if (event.eventType === 'delivered') {
+            setPackets(prev => prev.map(p => 
+              p.id === event.packetId ? { ...p, progress: 1, status: 'delivered' } : p
+            ));
+          } else if (event.eventType === 'packet_lost') {
+            setPackets(prev => prev.map(p => 
+              p.id === event.packetId ? { ...p, status: 'lost' } : p
+            ));
+          }
+        });
+        
+        addLog('packet_sent', 'WebSocket connected - Ready for real-time updates');
+        
+      } catch (error) {
+        console.error('Failed to initialize session:', error);
+        addLog('node_failed', 'Failed to initialize session - using offline mode');
+      }
+    };
+    
+    initializeSession();
     saveToHistory();
+    
+    // Cleanup
+    return () => {
+      webSocketService.unsubscribeFromSession(sessionId);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Keyboard shortcuts
@@ -90,6 +158,7 @@ export const SimulatorLayout: React.FC<SimulatorLayoutProps> = ({
 
     window.addEventListener('keydown', handleKeyPress);
     return () => window.removeEventListener('keydown', handleKeyPress);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [historyIndex, history.length]);
 
   const saveToHistory = useCallback(() => {
@@ -144,50 +213,95 @@ export const SimulatorLayout: React.FC<SimulatorLayoutProps> = ({
     ));
   }, []);
 
-  const handleNodeCreate = useCallback((x: number, y: number) => {
+  const handleNodeCreate = useCallback(async (x: number, y: number) => {
     if (mode !== 'add') return;
 
-    const nodeTypes: Node['type'][] = ['server', 'client', 'router'];
-    const randomType = nodeTypes[Math.floor(Math.random() * nodeTypes.length)];
-    
-    const newNode: Node = {
-      id: `node_${generateId()}`,
-      x,
-      y,
-      type: randomType,
-      active: true,
-      label: `${randomType}_${nodes.length + 1}`,
-    };
-
-    setNodes(prev => [...prev, newNode]);
-    
-    // Auto-connect to nearest node if exists
-    if (nodes.length > 0) {
-      const nearestNode = nodes.reduce((nearest, node) => {
-        const distance = Math.sqrt(
-          Math.pow(node.x - x, 2) + Math.pow(node.y - y, 2)
-        );
-        const nearestDistance = Math.sqrt(
-          Math.pow(nearest.x - x, 2) + Math.pow(nearest.y - y, 2)
-        );
-        return distance < nearestDistance ? node : nearest;
-      });
-
-      const newEdge: Edge = {
-        id: `edge_${generateId()}`,
-        sourceId: nearestNode.id,
-        targetId: newNode.id,
+    try {
+      const nodeTypes: Node['type'][] = ['server', 'client', 'router'];
+      const randomType = nodeTypes[Math.floor(Math.random() * nodeTypes.length)];
+      
+      // Map frontend types to backend types
+      const backendType = randomType === 'server' ? 'SERVER' : 
+                         randomType === 'client' ? 'HOST' : 'ROUTER';
+      
+      const nodeData = {
+        name: `${randomType}_${nodes.length + 1}`,
+        type: backendType as 'HOST' | 'ROUTER' | 'SWITCH' | 'HUB' | 'GATEWAY' | 'FIREWALL' | 'LOAD_BALANCER' | 'SERVER',
+        positionX: x,
+        positionY: y,
+        processingDelay: 10,
+        bufferSize: 100,
+        isActive: true
+      };
+      
+      const backendNode = await apiService.createNode(sessionId, studentId, nodeData);
+      
+      // Convert backend node to frontend format
+      const newNode: Node = {
+        id: backendNode.id,
+        x: backendNode.positionX,
+        y: backendNode.positionY,
+        type: randomType,
+        active: backendNode.isActive,
+        label: backendNode.name,
       };
 
-      setEdges(prev => [...prev, newEdge]);
+      setNodes(prev => [...prev, newNode]);
+      
+      // Auto-connect to nearest node if exists
+      if (nodes.length > 0) {
+        const nearestNode = nodes.reduce((nearest, node) => {
+          const distance = Math.sqrt(
+            Math.pow(node.x - x, 2) + Math.pow(node.y - y, 2)
+          );
+          const nearestDistance = Math.sqrt(
+            Math.pow(nearest.x - x, 2) + Math.pow(nearest.y - y, 2)
+          );
+          return distance < nearestDistance ? node : nearest;
+        });
+
+        // Create connection via backend
+        try {
+          const connectionData = {
+            sourceNodeId: nearestNode.id,
+            targetNodeId: newNode.id,
+            type: 'ETHERNET' as const,
+            bandwidth: 1000,
+            latency: 10,
+            packetLossRate: 0.01,
+            jitter: 1,
+            mtu: 1500,
+            isActive: true,
+            isBidirectional: true,
+            cost: 1
+          };
+          
+          await apiService.createConnection(sessionId, studentId, connectionData);
+          
+          const newEdge: Edge = {
+            id: `edge_${generateId()}`,
+            sourceId: nearestNode.id,
+            targetId: newNode.id,
+          };
+
+          setEdges(prev => [...prev, newEdge]);
+        } catch (error) {
+          console.error('Failed to create connection:', error);
+          addLog('node_failed', 'Failed to create connection between nodes');
+        }
+      }
+
+      addLog('packet_sent', `Created new ${randomType} node: ${newNode.label}`, newNode.id);
+      toast.success(`Created ${randomType} node`);
+      saveToHistory();
+    } catch (error) {
+      console.error('Failed to create node:', error);
+      addLog('node_failed', 'Failed to create node');
+      toast.error('Failed to create node');
     }
+  }, [nodes, addLog, mode, saveToHistory, sessionId, studentId]);
 
-    addLog('packet_sent', `Created new ${randomType} node: ${newNode.label}`, newNode.id);
-    toast.success(`Created ${randomType} node`);
-    saveToHistory();
-  }, [nodes, addLog, mode, saveToHistory]);
-
-  const handleSendPacket = useCallback(() => {
+  const handleSendPacket = useCallback(async () => {
     if (nodes.length < 2) {
       toast.error('Need at least 2 nodes to send packets');
       return;
@@ -199,76 +313,93 @@ export const SimulatorLayout: React.FC<SimulatorLayoutProps> = ({
       return;
     }
 
-    const sourceNode = activeNodes[Math.floor(Math.random() * activeNodes.length)];
-    let targetNode = activeNodes[Math.floor(Math.random() * activeNodes.length)];
-    
-    while (targetNode.id === sourceNode.id && activeNodes.length > 1) {
-      targetNode = activeNodes[Math.floor(Math.random() * activeNodes.length)];
-    }
+    try {
+      const sourceNode = activeNodes[Math.floor(Math.random() * activeNodes.length)];
+      let targetNode = activeNodes[Math.floor(Math.random() * activeNodes.length)];
+      
+      while (targetNode.id === sourceNode.id && activeNodes.length > 1) {
+        targetNode = activeNodes[Math.floor(Math.random() * activeNodes.length)];
+      }
 
-    const newPacket: Packet = {
-      id: `packet_${generateId()}`,
-      sourceId: sourceNode.id,
-      targetId: targetNode.id,
-      progress: 0,
-      status: 'traveling',
-    };
+      // Send packet via backend
+      const packetData = {
+        sourceNodeId: sourceNode.id,
+        targetNodeId: targetNode.id,
+        size: 1500,
+        payload: 'Hello World',
+        priority: 1
+      };
 
-    setPackets(prev => [...prev, newPacket]);
-    addLog('packet_sent', 
-      `Packet sent from ${sourceNode.label} to ${targetNode.label}`, 
-      sourceNode.id, 
-      newPacket.id
-    );
+      const backendPacket = await apiService.sendPacket(sessionId, studentId, packetData);
 
-    // Simulate packet journey with enhanced animations
-    const animatePacket = () => {
-      setPackets(prev => prev.map(packet => {
-        if (packet.id !== newPacket.id) return packet;
+      const newPacket: Packet = {
+        id: backendPacket.id,
+        sourceId: sourceNode.id,
+        targetId: targetNode.id,
+        progress: 0,
+        status: 'traveling',
+      };
 
-        const newProgress = packet.progress + 0.015;
-        
-        if (newProgress >= 1) {
-          const random = Math.random() * 100;
-          let status: Packet['status'] = 'delivered';
-          let message = `Packet delivered successfully to ${targetNode.label}`;
+      setPackets(prev => [...prev, newPacket]);
+      addLog('packet_sent', 
+        `Packet sent from ${sourceNode.label} to ${targetNode.label}`, 
+        sourceNode.id, 
+        newPacket.id
+      );
+
+      // Simulate packet journey with enhanced animations
+      const animatePacket = () => {
+        setPackets(prev => prev.map(packet => {
+          if (packet.id !== newPacket.id) return packet;
+
+          const newProgress = packet.progress + 0.015;
           
-          if (random < packetLoss) {
-            status = 'lost';
-            message = `Packet lost in transit to ${targetNode.label}`;
-          } else if (random < packetLoss + corruption) {
-            status = 'corrupted';
-            message = `Packet corrupted during transmission to ${targetNode.label}`;
-          } else if (!targetNode.active) {
-            status = 'failed';
-            message = `Packet failed - target node ${targetNode.label} is down`;
+          if (newProgress >= 1) {
+            const random = Math.random() * 100;
+            let status: Packet['status'] = 'delivered';
+            let message = `Packet delivered successfully to ${targetNode.label}`;
+            
+            if (random < packetLoss) {
+              status = 'lost';
+              message = `Packet lost in transit to ${targetNode.label}`;
+            } else if (random < packetLoss + corruption) {
+              status = 'corrupted';
+              message = `Packet corrupted during transmission to ${targetNode.label}`;
+            } else if (!targetNode.active) {
+              status = 'failed';
+              message = `Packet failed - target node ${targetNode.label} is down`;
+            }
+
+            addLog(
+              status === 'delivered' ? 'packet_delivered' :
+              status === 'lost' ? 'packet_lost' :
+              status === 'corrupted' ? 'packet_corrupted' : 'packet_lost',
+              message,
+              targetNode.id,
+              packet.id
+            );
+
+            setTimeout(() => {
+              setPackets(prev => prev.filter(p => p.id !== packet.id));
+            }, 1500);
+
+            return { ...packet, progress: 1, status };
           }
 
-          addLog(
-            status === 'delivered' ? 'packet_delivered' :
-            status === 'lost' ? 'packet_lost' :
-            status === 'corrupted' ? 'packet_corrupted' : 'packet_lost',
-            message,
-            targetNode.id,
-            packet.id
-          );
+          return { ...packet, progress: newProgress };
+        }));
+      };
 
-          setTimeout(() => {
-            setPackets(prev => prev.filter(p => p.id !== packet.id));
-          }, 1500);
+      const interval = setInterval(animatePacket, latency / 60);
+      setTimeout(() => clearInterval(interval), latency + 1500);
 
-          return { ...packet, progress: 1, status };
-        }
-
-        return { ...packet, progress: newProgress };
-      }));
-    };
-
-    const interval = setInterval(animatePacket, latency / 60);
-    setTimeout(() => clearInterval(interval), latency + 1500);
-
-    toast.success('Packet sent!');
-  }, [nodes, packetLoss, corruption, latency, addLog]);
+      toast.success('Packet sent!');
+    } catch (error) {
+      console.error('Failed to send packet:', error);
+      addLog('packet_lost', 'Failed to send packet');
+      toast.error('Failed to send packet');
+    }
+  }, [nodes, packetLoss, corruption, latency, addLog, sessionId, studentId]);
 
   const handleToggleNode = useCallback((nodeId: string) => {
     setNodes(prev => prev.map(node => {
@@ -423,7 +554,19 @@ export const SimulatorLayout: React.FC<SimulatorLayoutProps> = ({
           </Button>
           
           {!rightPanelCollapsed && (
-            <h2 className="font-semibold text-foreground">Activity & AI</h2>
+            <div className="flex items-center gap-2">
+              <h2 className="font-semibold text-foreground">Activity & AI</h2>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setAiChatbotOpen(true)}
+                className="p-2 hover:bg-background/50 neon-glow-blue"
+                title="Open AI Assistant"
+              >
+                <Brain className="w-4 h-4" />
+                <MessageCircle className="w-3 h-3 -ml-1" />
+              </Button>
+            </div>
           )}
         </div>
 
@@ -461,6 +604,14 @@ export const SimulatorLayout: React.FC<SimulatorLayoutProps> = ({
           )}
         </div>
       </div>
+
+      {/* AI Chatbot */}
+      <AIChatbot
+        sessionId={sessionId}
+        studentId={studentId}
+        isOpen={aiChatbotOpen}
+        onClose={() => setAiChatbotOpen(false)}
+      />
     </div>
   );
 };
