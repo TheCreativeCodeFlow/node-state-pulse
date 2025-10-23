@@ -47,7 +47,7 @@ export const SimulatorLayout: React.FC<SimulatorLayoutProps> = ({
 
   // Source and destination selection
   const [sourceNodeId, setSourceNodeId] = useState<string | null>(null);
-  const [destinationNodeId, setDestinationNodeId] = useState<string | null>(null);
+  const [destinationNodeIds, setDestinationNodeIds] = useState<string[]>([]);
   const [customMessage, setCustomMessage] = useState('');
   const [viewMode, setViewMode] = useState<'canvas' | 'list'>('canvas');
   
@@ -154,9 +154,9 @@ export const SimulatorLayout: React.FC<SimulatorLayoutProps> = ({
       isDestination: false 
     }));
 
-    // Toggle source/destination selection
+    // Toggle source/destination selection - one source, multiple destinations
     if (!sourceNodeId) {
-      // Set as source
+      // Set as source (first click)
       setSourceNodeId(node.id);
       updatedNodes.forEach(n => {
         if (n.id === node.id) {
@@ -164,104 +164,122 @@ export const SimulatorLayout: React.FC<SimulatorLayoutProps> = ({
         }
       });
       setNodes(updatedNodes);
-    } else if (!destinationNodeId && node.id !== sourceNodeId) {
-      // Set as destination
-      setDestinationNodeId(node.id);
+    } else if (node.id === sourceNodeId) {
+      // Clicking source again resets everything
+      setSourceNodeId(null);
+      setDestinationNodeIds([]);
+      setNodes(updatedNodes);
+    } else {
+      // Toggle destination (can select multiple)
+      const isAlreadyDestination = destinationNodeIds.includes(node.id);
+      
+      if (isAlreadyDestination) {
+        // Remove from destinations
+        setDestinationNodeIds(prev => prev.filter(id => id !== node.id));
+      } else {
+        // Add to destinations
+        setDestinationNodeIds(prev => [...prev, node.id]);
+      }
+      
+      // Update visual state
       updatedNodes.forEach(n => {
         if (n.id === sourceNodeId) {
           n.isSource = true;
-        } else if (n.id === node.id) {
+        } else if (isAlreadyDestination ? destinationNodeIds.filter(id => id !== node.id).includes(n.id) : [...destinationNodeIds, node.id].includes(n.id)) {
           n.isDestination = true;
         }
       });
       setNodes(updatedNodes);
-    } else {
-      // Reset selection
-      setSourceNodeId(null);
-      setDestinationNodeId(null);
-      setNodes(updatedNodes);
     }
-  }, [mode, sourceNodeId, destinationNodeId, nodes, connectingFromNode, edges, addLog]);
+  }, [mode, sourceNodeId, destinationNodeIds, nodes, connectingFromNode, edges, addLog]);
 
   // Simple message sending
   const handleSimpleSendMessage = useCallback(() => {
-    if (!sourceNodeId || !destinationNodeId || !customMessage.trim()) {
+    if (!sourceNodeId || destinationNodeIds.length === 0 || !customMessage.trim()) {
       return;
     }
 
     const sourceNode = nodes.find(n => n.id === sourceNodeId);
-    const destNode = nodes.find(n => n.id === destinationNodeId);
     
-    if (!sourceNode || !destNode) {
+    if (!sourceNode) {
       return;
     }
 
-    // Create a simple packet animation
-    const newPacket: Packet = {
-      id: generateId(),
-      sourceId: sourceNodeId,
-      targetId: destinationNodeId,
-      progress: 0,
-      status: 'traveling'
-    };
-
-    // Add the packet and animate it
-    setPackets(prev => [...prev, newPacket]);
-    
-    // Add log entry
-    addLog('packet_sent', `Message sent from ${sourceNode.label} to ${destNode.label}: "${customMessage}"`, sourceNodeId);
-
-    // Simulate packet travel with corruption/loss based on network conditions
-    const travelTime = 100 + (latency * 10); // Base 100ms + latency factor
-    const lossChance = packetLoss / 100;
-    const corruptChance = corruption / 100;
-
-    let currentProgress = 0;
-    const animationInterval = setInterval(() => {
-      currentProgress += 0.05; // 5% increment
-
-      if (currentProgress >= 1) {
-        clearInterval(animationInterval);
-        
-        // Determine final status based on network conditions
-        const random = Math.random();
-        let finalStatus: Packet['status'] = 'delivered';
-        let finalMessage = customMessage;
-
-        if (random < lossChance) {
-          finalStatus = 'lost';
-          addLog('packet_lost', `Message lost during transmission from ${sourceNode.label} to ${destNode.label}`, destNode.id);
-        } else if (random < lossChance + corruptChance) {
-          finalStatus = 'corrupted';
-          // Corrupt the message
-          finalMessage = customMessage.split('').map(char => 
-            Math.random() < 0.3 ? '?' : char
-          ).join('');
-          addLog('packet_corrupted', `Message corrupted during transmission: "${finalMessage}"`, destNode.id);
-        } else {
-          addLog('packet_delivered', `Message delivered to ${destNode.label}: "${finalMessage}"`, destNode.id);
-        }
-
-        // Update packet status
-        setPackets(prev => prev.map(p => 
-          p.id === newPacket.id ? { ...p, progress: 1, status: finalStatus } : p
-        ));
-
-        // Remove packet after a short delay
-        setTimeout(() => {
-          setPackets(prev => prev.filter(p => p.id !== newPacket.id));
-        }, 2000);
-
-        // Clear message and selection
-        setCustomMessage('');
-      } else {
-        // Update progress
-        setPackets(prev => prev.map(p => 
-          p.id === newPacket.id ? { ...p, progress: currentProgress } : p
-        ));
+    // Send message to all selected destinations
+    destinationNodeIds.forEach(destinationId => {
+      const destNode = nodes.find(n => n.id === destinationId);
+      
+      if (!destNode) {
+        return;
       }
-    }, travelTime / 20); // 20 animation steps
-  }, [sourceNodeId, destinationNodeId, customMessage, nodes, packetLoss, corruption, latency, addLog]);
+
+      // Create a simple packet animation
+      const newPacket: Packet = {
+        id: generateId(),
+        sourceId: sourceNodeId,
+        targetId: destinationId,
+        progress: 0,
+        status: 'traveling'
+      };
+
+      // Add the packet and animate it
+      setPackets(prev => [...prev, newPacket]);
+      
+      // Add log entry
+      addLog('packet_sent', `Message sent from ${sourceNode.label} to ${destNode.label}: "${customMessage}"`, sourceNodeId);
+
+      // Simulate packet travel with corruption/loss based on network conditions
+      const travelTime = 100 + (latency * 10); // Base 100ms + latency factor
+      const lossChance = packetLoss / 100;
+      const corruptChance = corruption / 100;
+
+      let currentProgress = 0;
+      const animationInterval = setInterval(() => {
+        currentProgress += 0.05; // 5% increment
+
+        if (currentProgress >= 1) {
+          clearInterval(animationInterval);
+          
+          // Determine final status based on network conditions
+          const random = Math.random();
+          let finalStatus: Packet['status'] = 'delivered';
+          let finalMessage = customMessage;
+
+          if (random < lossChance) {
+            finalStatus = 'lost';
+            addLog('packet_lost', `Message lost during transmission from ${sourceNode.label} to ${destNode.label}`, destNode.id);
+          } else if (random < lossChance + corruptChance) {
+            finalStatus = 'corrupted';
+            // Corrupt the message
+            finalMessage = customMessage.split('').map(char => 
+              Math.random() < 0.3 ? '?' : char
+            ).join('');
+            addLog('packet_corrupted', `Message corrupted during transmission: "${finalMessage}"`, destNode.id);
+          } else {
+            addLog('packet_delivered', `Message delivered to ${destNode.label}: "${finalMessage}"`, destNode.id);
+          }
+
+          // Update packet status
+          setPackets(prev => prev.map(p => 
+            p.id === newPacket.id ? { ...p, progress: 1, status: finalStatus } : p
+          ));
+
+          // Remove packet after a short delay
+          setTimeout(() => {
+            setPackets(prev => prev.filter(p => p.id !== newPacket.id));
+          }, 2000);
+        } else {
+          // Update progress
+          setPackets(prev => prev.map(p => 
+            p.id === newPacket.id ? { ...p, progress: currentProgress } : p
+          ));
+        }
+      }, travelTime / 20); // 20 animation steps
+    });
+
+    // Clear message after sending to all destinations
+    setCustomMessage('');
+  }, [sourceNodeId, destinationNodeIds, customMessage, nodes, packetLoss, corruption, latency, addLog]);
 
   // Handle log click for AI analysis
   const handleLogClick = useCallback((logMessage: string) => {
@@ -546,7 +564,7 @@ export const SimulatorLayout: React.FC<SimulatorLayoutProps> = ({
                       <div className="text-center">
                         <h3 className="text-lg font-semibold text-neon-green mb-2">Send Message</h3>
                         <p className="text-xs text-muted-foreground">
-                          Select source and destination nodes, then send a message
+                          Select source (1st click), then select multiple destinations
                         </p>
                       </div>
 
@@ -557,11 +575,19 @@ export const SimulatorLayout: React.FC<SimulatorLayoutProps> = ({
                             {sourceNodeId ? nodes.find(n => n.id === sourceNodeId)?.label : 'None'}
                           </span>
                         </div>
-                        <div className="flex items-center justify-between text-sm">
-                          <span>Destination:</span>
-                          <span className="font-mono text-neon-purple">
-                            {destinationNodeId ? nodes.find(n => n.id === destinationNodeId)?.label : 'None'}
-                          </span>
+                        <div className="flex items-start justify-between text-sm">
+                          <span>Destinations:</span>
+                          <div className="flex flex-col items-end gap-1">
+                            {destinationNodeIds.length === 0 ? (
+                              <span className="font-mono text-muted-foreground">None</span>
+                            ) : (
+                              destinationNodeIds.map(id => (
+                                <span key={id} className="font-mono text-neon-purple text-xs">
+                                  {nodes.find(n => n.id === id)?.label}
+                                </span>
+                              ))
+                            )}
+                          </div>
                         </div>
                       </div>
 
@@ -578,11 +604,11 @@ export const SimulatorLayout: React.FC<SimulatorLayoutProps> = ({
 
                       <Button
                         onClick={handleSimpleSendMessage}
-                        disabled={!sourceNodeId || !destinationNodeId || !customMessage.trim()}
+                        disabled={!sourceNodeId || destinationNodeIds.length === 0 || !customMessage.trim()}
                         className="w-full glass neon-glow-green"
                         size="sm"
                       >
-                        Send Message
+                        Send to {destinationNodeIds.length > 0 ? `${destinationNodeIds.length} Node${destinationNodeIds.length > 1 ? 's' : ''}` : 'All'}
                       </Button>
                     </div>
                   </Card>
