@@ -4,6 +4,7 @@ import { NetworkNode } from './NetworkNode';
 import { NetworkEdge } from './NetworkEdge';
 import { NetworkPacket } from './NetworkPacket';
 import { motion } from 'framer-motion';
+import { toast } from 'sonner';
 
 interface NetworkCanvasProps {
   nodes: Device[];
@@ -30,7 +31,9 @@ export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
     selectedDeviceId,
     addConnection,
     setMode,
-    activeMode
+    activeMode,
+    deleteDevice,
+    addLog
   } = useNetworkStore();
 
   // Local state for temporary connection line drawing
@@ -60,6 +63,15 @@ export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
       }
     } else if (activeMode === 'delete') {
       // Handle delete
+      const deviceName = clickedNode.name;
+      const deviceType = clickedNode.type;
+
+      deleteDevice(clickedNode.id);
+      addLog(`Device deleted: ${deviceName} (${deviceType})`, 'warning', clickedNode.id);
+
+      toast.success('Device Deleted', {
+        description: `${deviceName} has been removed from the network.`
+      });
     } else {
       selectDevice(clickedNode.id);
     }

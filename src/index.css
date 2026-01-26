@@ -4,7 +4,8 @@
 
 @layer base {
   :root {
-    --background: 222 47% 6%; /* #0a0a0f - Deep Dark Foundation */
+    --background: 222 47% 6%;
+    /* #0a0a0f - Deep Dark Foundation */
     --foreground: 210 40% 98%;
 
     --card: 222 47% 8%;
@@ -13,7 +14,8 @@
     --popover: 222 47% 8%;
     --popover-foreground: 210 40% 98%;
 
-    --primary: 190 100% 50%; /* #00d9ff - Cyan/Electric Blue */
+    --primary: 190 100% 50%;
+    /* #00d9ff - Cyan/Electric Blue */
     --primary-foreground: 222 47% 11%;
 
     --secondary: 217 33% 17%;
@@ -40,6 +42,7 @@
   * {
     @apply border-border;
   }
+
   body {
     @apply bg-background text-foreground;
   }
@@ -49,7 +52,7 @@
   .glass-card {
     @apply bg-slate-900/60 backdrop-blur-xl border border-white/10 shadow-xl;
   }
-  
+
   .glass-panel {
     @apply bg-slate-900/80 backdrop-blur-md border-r border-white/5;
   }
@@ -60,5 +63,24 @@
 
   .neon-glow-hover:hover {
     box-shadow: 0 0 15px rgba(0, 217, 255, 0.5), 0 0 30px rgba(0, 217, 255, 0.2);
+  }
+
+  /* Custom Scrollbar Styling */
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: rgba(15, 23, 42, 0.5);
+    border-radius: 4px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: #475569;
+    border-radius: 4px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: #64748b;
   }
 }

@@ -235,7 +235,7 @@ export const AIHelpPanel: React.FC<AIHelpPanelProps> = ({
   };
 
   return (
-    <div className={cn("relative", className)}>
+    <div className={cn("h-full", className)}>
       {/* Floating AI Button (when collapsed) */}
       {!isExpanded && (
         <Button
@@ -296,7 +296,14 @@ export const AIHelpPanel: React.FC<AIHelpPanelProps> = ({
           </div>
 
           {/* Messages Area */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-900/50">
+          <div
+            className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-900/50 custom-scrollbar"
+            style={{
+              scrollbarWidth: 'thin',
+              scrollbarColor: '#475569 rgba(15, 23, 42, 0.5)',
+              maxHeight: 'calc(100vh - 280px)'
+            }}
+          >
             {messages.map((message) => (
               <div
                 key={message.id}

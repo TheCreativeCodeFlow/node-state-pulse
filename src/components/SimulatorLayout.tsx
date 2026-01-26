@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Network,
@@ -80,6 +80,119 @@ const findPath = (
   }
 
   return null;
+};
+
+// Session Timer Component with Manual Controls
+const SessionTimer = () => {
+  const {
+    sessionRunning,
+    sessionStartTime,
+    sessionElapsedTime,
+    startSession,
+    pauseSession,
+    resumeSession,
+    stopSession
+  } = useNetworkStore();
+
+  const [displayTime, setDisplayTime] = useState('00:00:00');
+
+  // Update display time (no auto-start)
+  useEffect(() => {
+    if (!sessionRunning && !sessionStartTime) {
+      setDisplayTime('00:00:00');
+      return;
+    }
+
+    const updateTime = () => {
+      let totalMs = sessionElapsedTime;
+
+      if (sessionRunning && sessionStartTime) {
+        totalMs += Date.now() - sessionStartTime;
+      }
+
+      const totalSeconds = Math.floor(totalMs / 1000);
+      const hours = Math.floor(totalSeconds / 3600);
+      const minutes = Math.floor((totalSeconds % 3600) / 60);
+      const seconds = totalSeconds % 60;
+
+      setDisplayTime(
+        `${hours.toString().padStart(2, '0')}:${minutes
+          .toString()
+          .padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
+      );
+    };
+
+    updateTime();
+    const interval = setInterval(updateTime, 1000);
+
+    return () => clearInterval(interval);
+  }, [sessionRunning, sessionStartTime, sessionElapsedTime]);
+
+  const handleTogglePause = () => {
+    if (sessionRunning) {
+      pauseSession();
+    } else {
+      resumeSession();
+    }
+  };
+
+  const handleEndSession = () => {
+    stopSession();
+    toast.success('Session Ended', {
+      description: `Session duration: ${displayTime}`
+    });
+  };
+
+  // No session active - show start button
+  if (!sessionStartTime && !sessionRunning && sessionElapsedTime === 0) {
+    return (
+      <button
+        onClick={startSession}
+        className="flex items-center gap-2 bg-neon-green/10 hover:bg-neon-green/20 rounded-full px-4 py-2 border border-neon-green/30 hover:border-neon-green/50 transition-all group"
+        title="Start New Session"
+      >
+        <Play className="w-4 h-4 text-neon-green fill-current" />
+        <span className="text-xs font-medium text-neon-green">Start Session</span>
+      </button>
+    );
+  }
+
+  // Session active or paused - show timer and controls
+  return (
+    <div className="flex items-center gap-2">
+      {/* Timer Display */}
+      <div className="flex items-center gap-2 bg-slate-800/50 rounded-full p-1 px-3 border border-white/5 backdrop-blur-sm">
+        <button
+          onClick={handleTogglePause}
+          className="p-1.5 hover:bg-white/10 rounded-full transition-colors group"
+          title={sessionRunning ? "Pause Session" : "Resume Session"}
+        >
+          {sessionRunning ? (
+            <div className="w-4 h-4 flex items-center justify-center">
+              <div className="flex gap-0.5">
+                <div className="w-1 h-3 bg-neon-yellow rounded-sm" />
+                <div className="w-1 h-3 bg-neon-yellow rounded-sm" />
+              </div>
+            </div>
+          ) : (
+            <Play className="w-4 h-4 text-neon-green fill-current" />
+          )}
+        </button>
+        <span className="text-xs font-mono text-slate-300 border-l border-white/10 pl-2 min-w-[60px] tabular-nums">
+          {displayTime}
+        </span>
+      </div>
+
+      {/* End Session Button */}
+      <button
+        onClick={handleEndSession}
+        className="px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 hover:border-red-500/50 text-red-400 hover:text-red-300 text-xs font-medium transition-all"
+        title="End Session"
+      >
+        End Session
+      </button>
+    </div>
+  );
 };
 
 export const SimulatorLayout = () => {
@@ -204,14 +317,7 @@ export const SimulatorLayout = () => {
         </div>
 
         <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 bg-slate-800/50 rounded-full p-1 px-2 border border-white/5">
-            <button className="p-1.5 hover:bg-white/10 rounded-full transition-colors">
-              <Play className="w-4 h-4 text-neon-green fill-current" />
-            </button>
-            <span className="text-xs font-mono text-slate-400 border-l border-white/10 pl-2">
-              00:00:00
-            </span>
-          </div>
+          <SessionTimer />
         </div>
 
         <div className="flex items-center gap-2">

@@ -75,6 +75,16 @@ export interface NetworkState {
     addLog: (message: string, type?: LogType, nodeId?: string, packetId?: string) => void;
     addPacket: (packet: Omit<Packet, 'id'>) => void;
     updatePackets: () => void;
+
+    // Session Management
+    sessionStartTime: number | null;
+    sessionRunning: boolean;
+    sessionElapsedTime: number;
+    startSession: () => void;
+    stopSession: () => void;
+    pauseSession: () => void;
+    resumeSession: () => void;
+    updateSessionTime: () => void;
 }
 
 export const useNetworkStore = create<NetworkState>((set, get) => ({
@@ -92,6 +102,11 @@ export const useNetworkStore = create<NetworkState>((set, get) => ({
     leftPanelOpen: true,
     rightPanelOpen: true,
     activeMode: 'select',
+
+    // Session State
+    sessionStartTime: null,
+    sessionRunning: false,
+    sessionElapsedTime: 0,
 
     // Actions
     addDevice: (x, y, type = 'PC') => {
@@ -222,5 +237,51 @@ export const useNetworkStore = create<NetworkState>((set, get) => ({
 
             return { packets: updatedPackets };
         });
+    },
+
+    // Session Management
+    startSession: () => {
+        set({
+            sessionStartTime: Date.now(),
+            sessionRunning: true,
+            sessionElapsedTime: 0,
+        });
+    },
+
+    stopSession: () => {
+        set({
+            sessionRunning: false,
+            sessionStartTime: null,
+            sessionElapsedTime: 0,
+        });
+    },
+
+    pauseSession: () => {
+        const { sessionStartTime, sessionElapsedTime } = get();
+        if (sessionStartTime) {
+            const additionalTime = Date.now() - sessionStartTime;
+            set({
+                sessionRunning: false,
+                sessionElapsedTime: sessionElapsedTime + additionalTime,
+                sessionStartTime: null,
+            });
+        }
+    },
+
+    resumeSession: () => {
+        set({
+            sessionRunning: true,
+            sessionStartTime: Date.now(),
+        });
+    },
+
+    updateSessionTime: () => {
+        const { sessionRunning, sessionStartTime, sessionElapsedTime } = get();
+        if (sessionRunning && sessionStartTime) {
+            // Don't set state here, just return the calculated value
+            // The component will call this frequently to get the latest time
+            return sessionElapsedTime + (Date.now() - sessionStartTime);
+        }
+        return sessionElapsedTime;
     },
 }));
