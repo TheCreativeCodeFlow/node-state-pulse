@@ -26,7 +26,7 @@ export const NetworkPacket: React.FC<NetworkPacketProps> = ({ x, y, status }) =>
   return (
     <div
       className={cn(
-        "absolute w-4 h-4 rounded-full pointer-events-none transform -translate-x-2 -translate-y-2 transition-all duration-300",
+        "absolute w-4 h-4 rounded-full pointer-events-none transform -translate-x-2 -translate-y-2",
         getPacketStyle()
       )}
       style={{
@@ -36,12 +36,11 @@ export const NetworkPacket: React.FC<NetworkPacketProps> = ({ x, y, status }) =>
     >
       {/* Inner glow */}
       <div className="absolute inset-0 rounded-full bg-white/30 animate-pulse" />
-      
-      {/* Particle trail for traveling packets */}
+
+      {/* Particle trail for traveling packets (Optional: Simple ping, no long trail) */}
       {status === 'traveling' && (
         <div className="absolute inset-0">
           <div className="absolute w-1 h-1 bg-white/50 rounded-full -top-2 -left-1 animate-ping" />
-          <div className="absolute w-0.5 h-0.5 bg-white/30 rounded-full -top-4 left-0 animate-ping delay-100" />
         </div>
       )}
     </div>

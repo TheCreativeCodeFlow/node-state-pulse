@@ -47,13 +47,14 @@ export default {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        // Premium Spec Colors
         neon: {
-          blue: "hsl(var(--neon-blue))",
-          green: "hsl(var(--neon-green))",
-          purple: "hsl(var(--neon-purple))",
-          cyan: "hsl(var(--neon-cyan))",
-          yellow: "hsl(var(--neon-yellow))",
-          orange: "hsl(var(--neon-orange))",
+          blue: "#00d9ff", // Electric Blue
+          cyan: "#06b6d4",
+          green: "#10b981", // Emerald
+          purple: "#8b5cf6",
+          yellow: "#f59e0b", // Amber
+          red: "#ef4444", // Rose
         },
         status: {
           success: "hsl(var(--success))",
@@ -61,9 +62,9 @@ export default {
           error: "hsl(var(--error))",
         },
         glass: {
-          bg: "hsl(var(--glass-bg))",
-          border: "hsl(var(--glass-border))",
-          shadow: "hsl(var(--glass-shadow))",
+          bg: "rgba(15, 23, 42, 0.6)",
+          border: "rgba(255, 255, 255, 0.08)",
+          shadow: "rgba(0, 0, 0, 0.4)",
         },
       },
       borderRadius: {
@@ -92,13 +93,6 @@ export default {
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
-        "spring": "spring var(--spring-duration) var(--spring-easing)",
-        "fade-in": "fadeIn 0.3s ease-out",
-        "slide-up": "slideUp 0.4s var(--spring-easing)",
-        "bounce-in": "bounceIn 0.6s var(--spring-easing)",
-        "shake": "shake 0.5s ease-in-out",
-        "pulse-red": "pulseRed 1s ease-in-out infinite",
-        "disintegrate": "disintegrate 0.8s ease-out forwards",
       },
     },
   },

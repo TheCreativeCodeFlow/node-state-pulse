@@ -1,23 +1,15 @@
 import React, { useEffect, useRef } from 'react';
 import { Card } from './ui/card';
 import { Badge } from './ui/badge';
-import { 
-  CheckCircle, 
-  XCircle, 
-  AlertTriangle, 
-  Zap, 
-  Clock 
+import {
+  CheckCircle,
+  XCircle,
+  AlertTriangle,
+  Zap,
+  Clock
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-
-export interface LogEntry {
-  id: string;
-  timestamp: Date;
-  type: 'packet_sent' | 'packet_delivered' | 'packet_lost' | 'packet_corrupted' | 'node_failed' | 'node_recovered';
-  message: string;
-  nodeId?: string;
-  packetId?: string;
-}
+import { LogEntry } from '../stores/useNetworkStore';
 
 interface LogPanelProps {
   logs: LogEntry[];
@@ -65,13 +57,14 @@ export const LogPanel: React.FC<LogPanelProps> = ({ logs, onLogClick }) => {
     }
   };
 
-  const formatTime = (timestamp: Date) => {
-    return timestamp.toLocaleTimeString('en-US', {
+  const formatTime = (timestamp: number) => {
+    const date = new Date(timestamp);
+    return date.toLocaleTimeString('en-US', {
       hour12: false,
       hour: '2-digit',
       minute: '2-digit',
       second: '2-digit',
-    }) + '.' + timestamp.getMilliseconds().toString().padStart(3, '0');
+    }) + '.' + date.getMilliseconds().toString().padStart(3, '0');
   };
 
   return (
@@ -82,8 +75,8 @@ export const LogPanel: React.FC<LogPanelProps> = ({ logs, onLogClick }) => {
           Real-time system events • {logs.length} entries
         </p>
       </div>
-      
-      <div 
+
+      <div
         ref={scrollRef}
         className="flex-1 overflow-y-auto p-4 space-y-2"
       >
@@ -113,10 +106,10 @@ export const LogPanel: React.FC<LogPanelProps> = ({ logs, onLogClick }) => {
                 <div className="flex-shrink-0 mt-0.5">
                   {getLogIcon(log.type)}
                 </div>
-                
+
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
-                    <Badge 
+                    <Badge
                       variant="outline"
                       className={cn(
                         "text-xs px-2 py-0.5 border-0",
@@ -125,16 +118,16 @@ export const LogPanel: React.FC<LogPanelProps> = ({ logs, onLogClick }) => {
                     >
                       {log.type.replace('_', ' ')}
                     </Badge>
-                    
+
                     <span className="text-xs text-muted-foreground font-mono">
                       {formatTime(log.timestamp)}
                     </span>
                   </div>
-                  
+
                   <p className="text-sm text-foreground leading-relaxed">
                     {log.message}
                   </p>
-                  
+
                   {(log.nodeId || log.packetId) && (
                     <div className="flex gap-2 mt-2">
                       {log.nodeId && (

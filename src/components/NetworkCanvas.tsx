@@ -1,40 +1,17 @@
-import React, { useRef, useEffect, useState, useCallback } from 'react';
+import React, { useRef } from 'react';
+import { useNetworkStore, Device, Connection, Packet } from '../stores/useNetworkStore';
 import { NetworkNode } from './NetworkNode';
 import { NetworkEdge } from './NetworkEdge';
 import { NetworkPacket } from './NetworkPacket';
-
-export interface Node {
-  id: string;
-  x: number;
-  y: number;
-  type: 'node';
-  active: boolean;
-  label: string;
-  isSource?: boolean;
-  isDestination?: boolean;
-}
-
-export interface Edge {
-  id: string;
-  sourceId: string;
-  targetId: string;
-}
-
-export interface Packet {
-  id: string;
-  sourceId: string;
-  targetId: string;
-  progress: number;
-  status: 'traveling' | 'delivered' | 'lost' | 'corrupted' | 'failed';
-}
+import { motion } from 'framer-motion';
 
 interface NetworkCanvasProps {
-  nodes: Node[];
-  edges: Edge[];
+  nodes: Device[];
+  edges: Connection[];
   packets: Packet[];
-  onNodeUpdate: (node: Node) => void;
+  onNodeUpdate: (node: Device) => void; // Kept for interface compatibility if needed
   onNodeCreate: (x: number, y: number) => void;
-  onNodeClick?: (node: Node) => void;
+  onNodeClick?: (node: Device) => void;
   mode?: 'select' | 'add' | 'connect' | 'delete';
   connectingFromNode?: string | null;
 }
@@ -43,139 +20,170 @@ export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
   nodes,
   edges,
   packets,
-  onNodeUpdate,
   onNodeCreate,
-  onNodeClick,
-  mode = 'select',
-  connectingFromNode,
+  mode
 }) => {
   const canvasRef = useRef<HTMLDivElement>(null);
-  const [draggedNode, setDraggedNode] = useState<string | null>(null);
-  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const {
+    updateDevicePosition,
+    selectDevice,
+    selectedDeviceId,
+    addConnection,
+    setMode,
+    activeMode
+  } = useNetworkStore();
 
-  const handleNodeDragStart = useCallback((nodeId: string, event: React.MouseEvent) => {
-    event.preventDefault();
-    const node = nodes.find(n => n.id === nodeId);
-    if (!node) return;
+  // Local state for temporary connection line drawing
+  const [tempConnection, setTempConnection] = React.useState<{ x1: number, y1: number, x2: number, y2: number } | null>(null);
+  const [connectingNodeId, setConnectingNodeId] = React.useState<string | null>(null);
 
-    setDraggedNode(nodeId);
-    const rect = canvasRef.current?.getBoundingClientRect();
-    if (rect) {
-      setDragOffset({
-        x: event.clientX - rect.left - node.x,
-        y: event.clientY - rect.top - node.y,
-      });
+  const handleCanvasClick = (e: React.MouseEvent) => {
+    if (activeMode === 'add' && canvasRef.current) {
+      const rect = canvasRef.current.getBoundingClientRect();
+      onNodeCreate(e.clientX - rect.left, e.clientY - rect.top);
+      setMode('select'); // Switch back to select after adding
+    } else {
+      selectDevice(null); // Deselect if clicking empty space
     }
-  }, [nodes]);
+  };
 
-  const handleMouseMove = useCallback((event: MouseEvent) => {
-    if (!draggedNode || !canvasRef.current) return;
-
-    const rect = canvasRef.current.getBoundingClientRect();
-    const x = event.clientX - rect.left - dragOffset.x;
-    const y = event.clientY - rect.top - dragOffset.y;
-
-    const node = nodes.find(n => n.id === draggedNode);
-    if (node) {
-      onNodeUpdate({
-        ...node,
-        x: Math.max(50, Math.min(rect.width - 50, x)),
-        y: Math.max(50, Math.min(rect.height - 50, y)),
-      });
+  const handleNodeClick = (clickedNode: Device) => {
+    if (activeMode === 'connect') {
+      if (!connectingNodeId) {
+        setConnectingNodeId(clickedNode.id);
+      } else {
+        if (connectingNodeId !== clickedNode.id) {
+          addConnection(connectingNodeId, clickedNode.id);
+        }
+        setConnectingNodeId(null);
+        setTempConnection(null);
+      }
+    } else if (activeMode === 'delete') {
+      // Handle delete
+    } else {
+      selectDevice(clickedNode.id);
     }
-  }, [draggedNode, dragOffset, nodes, onNodeUpdate]);
+  };
 
-  const handleMouseUp = useCallback(() => {
-    setDraggedNode(null);
-  }, []);
-
-  const handleCanvasDoubleClick = useCallback((event: React.MouseEvent) => {
-    if (mode !== 'add' || !canvasRef.current) return;
-    
-    const rect = canvasRef.current.getBoundingClientRect();
-    const x = event.clientX - rect.left;
-    const y = event.clientY - rect.top;
-    
-    onNodeCreate(x, y);
-  }, [onNodeCreate, mode]);
-
-  const handleCanvasClick = useCallback((event: React.MouseEvent) => {
-    if (mode !== 'add' || !canvasRef.current) return;
-    
-    const rect = canvasRef.current.getBoundingClientRect();
-    const x = event.clientX - rect.left;
-    const y = event.clientY - rect.top;
-    
-    onNodeCreate(x, y);
-  }, [onNodeCreate, mode]);
-
-  useEffect(() => {
-    if (draggedNode) {
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
-      return () => {
-        document.removeEventListener('mousemove', handleMouseMove);
-        document.removeEventListener('mouseup', handleMouseUp);
-      };
-    }
-  }, [draggedNode, handleMouseMove, handleMouseUp]);
-
-  const getCursorClass = () => {
-    switch (mode) {
-      case 'add': return 'cursor-copy';
-      case 'connect': return 'cursor-crosshair';
-      case 'delete': return 'cursor-not-allowed';
-      default: return 'cursor-default';
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (activeMode === 'connect' && connectingNodeId && canvasRef.current) {
+      const rect = canvasRef.current.getBoundingClientRect();
+      const sourceNode = nodes.find(n => n.id === connectingNodeId);
+      if (sourceNode) {
+        setTempConnection({
+          x1: sourceNode.x,
+          y1: sourceNode.y,
+          x2: e.clientX - rect.left,
+          y2: e.clientY - rect.top
+        });
+      }
     }
   };
 
   return (
     <div
       ref={canvasRef}
-      className={`relative w-full h-full glass-card overflow-hidden ${getCursorClass()}`}
-      onClick={mode === 'add' ? handleCanvasClick : undefined}
+      className={`relative w-full h-full overflow-hidden bg-background ${activeMode === 'add' ? 'cursor-crosshair' : 'cursor-default'}`}
+      onClick={handleCanvasClick}
+      onMouseMove={handleMouseMove}
     >
-      {/* Circuit grid background */}
-      <div className="absolute inset-0 opacity-10">
-        <div 
+      {/* Animated Grid Background */}
+      <div className="absolute inset-0 pointer-events-none opacity-20">
+        <div
           className="w-full h-full"
           style={{
-            backgroundImage: `
-              linear-gradient(hsl(var(--neon-blue)) 1px, transparent 1px),
-              linear-gradient(90deg, hsl(var(--neon-blue)) 1px, transparent 1px)
-            `,
-            backgroundSize: '40px 40px',
+            backgroundImage: `radial-gradient(#00d9ff 1px, transparent 1px)`,
+            backgroundSize: '40px 40px'
           }}
         />
       </div>
 
-      {/* Render edges first (behind nodes) */}
-      <svg className="absolute inset-0 w-full h-full pointer-events-none">
+      <svg className="absolute inset-0 w-full h-full pointer-events-none overflow-visible">
+        <defs>
+          <filter id="glow">
+            <feGaussianBlur stdDeviation="2.5" result="coloredBlur" />
+            <feMerge>
+              <feMergeNode in="coloredBlur" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+        </defs>
+
+        {/* Render Edges */}
         {edges.map(edge => {
-          const sourceNode = nodes.find(n => n.id === edge.sourceId);
-          const targetNode = nodes.find(n => n.id === edge.targetId);
-          if (!sourceNode || !targetNode) return null;
+          const source = nodes.find(n => n.id === edge.sourceId);
+          const target = nodes.find(n => n.id === edge.targetId);
+          if (!source || (!target && edge.targetId !== 'temp')) return null;
 
           return (
             <NetworkEdge
               key={edge.id}
-              x1={sourceNode.x}
-              y1={sourceNode.y}
-              x2={targetNode.x}
-              y2={targetNode.y}
+              x1={source.x}
+              y1={source.y}
+              x2={target?.x || 0}
+              y2={target?.y || 0}
+              type={edge.type}
+              status={edge.status}
             />
           );
         })}
+
+        {/* Temporary Connection Line */}
+        {tempConnection && (
+          <line
+            x1={tempConnection.x1}
+            y1={tempConnection.y1}
+            x2={tempConnection.x2}
+            y2={tempConnection.y2}
+            stroke="#f59e0b" // Neon Yellow
+            strokeWidth="2"
+            strokeDasharray="5 5"
+            className="animate-pulse"
+          />
+        )}
       </svg>
 
-      {/* Render packets */}
+      {/* Render Packets */}
       {packets.map(packet => {
-        const sourceNode = nodes.find(n => n.id === packet.sourceId);
-        const targetNode = nodes.find(n => n.id === packet.targetId);
-        if (!sourceNode || !targetNode) return null;
+        let x = 0;
+        let y = 0;
 
-        const x = sourceNode.x + (targetNode.x - sourceNode.x) * packet.progress;
-        const y = sourceNode.y + (targetNode.y - sourceNode.y) * packet.progress;
+        if (packet.path && packet.path.length > 1) {
+          // Multi-hop rendering
+          const pathIds = packet.path;
+          const totalSegments = pathIds.length - 1;
+
+          // Linear Easing (Steady)
+          const p = packet.progress;
+          const t = p; // Linear
+
+          // Map eased total progress to specific segment
+          const segmentProgressTotal = t * totalSegments;
+          const segmentIndex = Math.min(Math.floor(segmentProgressTotal), totalSegments - 1);
+          const segmentT = segmentProgressTotal - segmentIndex;
+
+          const currentId = pathIds[segmentIndex];
+          const nextId = pathIds[segmentIndex + 1];
+
+          const currentNode = nodes.find(n => n.id === currentId);
+          const nextNode = nodes.find(n => n.id === nextId);
+
+          if (!currentNode || !nextNode) return null;
+
+          x = currentNode.x + (nextNode.x - currentNode.x) * segmentT;
+          y = currentNode.y + (nextNode.y - currentNode.y) * segmentT;
+        } else {
+          // Direct rendering fallback
+          const source = nodes.find(n => n.id === packet.sourceId);
+          const target = nodes.find(n => n.id === packet.targetId);
+          if (!source || !target) return null;
+
+          // Linear Easing (Steady)
+          const t = packet.progress;
+
+          x = source.x + (target.x - source.x) * t;
+          y = source.y + (target.y - source.y) * t;
+        }
 
         return (
           <NetworkPacket
@@ -187,32 +195,19 @@ export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
         );
       })}
 
-      {/* Render nodes */}
+      {/* Render Nodes */}
       {nodes.map(node => (
         <NetworkNode
           key={node.id}
           node={node}
-          onDragStart={(event) => handleNodeDragStart(node.id, event)}
-          onClick={onNodeClick}
-          isDragged={draggedNode === node.id}
-          isConnecting={connectingFromNode === node.id}
-          canConnectTo={mode === 'connect' && connectingFromNode && connectingFromNode !== node.id}
+          updatePosition={(x, y) => updateDevicePosition(node.id, x, y)}
+          onClick={() => handleNodeClick(node)}
+          isSelected={node.id === selectedDeviceId}
+          isConnecting={connectingNodeId === node.id}
+          canConnectTo={activeMode === 'connect' && connectingNodeId !== null && connectingNodeId !== node.id}
         />
       ))}
 
-      {/* Canvas instructions */}
-      {nodes.length === 0 && (
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <div className="glass-card p-8 text-center max-w-md">
-            <h3 className="text-xl font-semibold text-neon-blue mb-2">
-              Network Canvas
-            </h3>
-            <p className="text-muted-foreground">
-              Select 'Add Node' mode and click anywhere to create nodes, then drag to connect and position them.
-            </p>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

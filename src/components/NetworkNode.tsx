@@ -1,98 +1,124 @@
 import React from 'react';
-import { Server, Monitor, Wifi } from 'lucide-react';
-import { Node } from './NetworkCanvas';
+import { motion } from 'framer-motion';
+import { Server, Monitor, Wifi, Router, Network, HardDrive } from 'lucide-react';
+import { Device } from '../stores/useNetworkStore';
 import { cn } from '@/lib/utils';
 
 interface NetworkNodeProps {
-  node: Node;
-  onDragStart: (event: React.MouseEvent) => void;
-  onClick?: (node: Node) => void;
-  isDragged: boolean;
+  node: Device;
+  onDragStart?: (event: React.MouseEvent) => void; // Kept for compatibility if needed, but motion handles drag
   isConnecting?: boolean;
   canConnectTo?: boolean;
+  isSelected?: boolean;
+  onClick?: () => void;
+  updatePosition: (x: number, y: number) => void;
 }
+
+const nodeVariants = {
+  initial: { scale: 0, opacity: 0 },
+  animate: { scale: 1, opacity: 1, transition: { type: "spring", stiffness: 300, damping: 20 } },
+  hover: { scale: 1.1, zIndex: 50, transition: { duration: 0.2 } },
+  tap: { scale: 0.95 },
+  drag: { scale: 1.1, zIndex: 100, boxShadow: "0px 10px 20px rgba(0,0,0,0.2)" }
+};
 
 export const NetworkNode: React.FC<NetworkNodeProps> = ({
   node,
-  onDragStart,
+  isConnecting,
+  canConnectTo,
+  isSelected,
   onClick,
-  isDragged,
-  isConnecting = false,
-  canConnectTo = false,
+  updatePosition
 }) => {
   const getNodeIcon = () => {
-    return <div className="w-4 h-4 bg-current rounded-full" />;
-  };
-
-  const getNodeColor = () => {
-    if (!node.active) return 'status-error';
-    if (isConnecting) return 'neon-yellow';
-    if (canConnectTo) return 'neon-cyan';
-    if (node.isSource) return 'neon-green';
-    if (node.isDestination) return 'neon-purple';
-    return 'neon-blue';
-  };
-
-  const handleClick = (event: React.MouseEvent) => {
-    event.stopPropagation();
-    if (onClick) {
-      onClick(node);
+    switch (node.type) {
+      case 'ROUTER': return <Router className="w-6 h-6" />;
+      case 'SWITCH': return <Network className="w-6 h-6" />;
+      case 'SERVER': return <Server className="w-6 h-6" />;
+      case 'PC': return <Monitor className="w-6 h-6" />;
+      case 'WIRELESS': return <Wifi className="w-6 h-6" />;
+      case 'HUB': return <HardDrive className="w-6 h-6" />;
+      default: return <Monitor className="w-6 h-6" />;
     }
   };
 
+  const getStatusColor = () => {
+    if (node.status === 'error') return 'text-neon-red border-neon-red shadow-neon-red/50';
+    if (isSelected) return 'text-neon-cyan border-neon-cyan shadow-neon-cyan/50';
+    if (isConnecting) return 'text-neon-yellow border-neon-yellow shadow-neon-yellow/50';
+    if (canConnectTo) return 'text-neon-green border-neon-green shadow-neon-green/50';
+    return 'text-slate-200 border-white/10 group-hover:border-neon-blue/50';
+  };
+
   return (
-    <div
-      className={cn(
-        "absolute glass-card p-4 rounded-2xl cursor-move select-none transition-all duration-300 hover:scale-105 min-w-24 text-center",
-        isDragged && "scale-110 neon-glow z-50",
-        !node.active && "animate-pulse-red opacity-80",
-        (node.isSource || node.isDestination) && "ring-2 ring-current",
-        isConnecting && "ring-4 ring-neon-yellow animate-pulse",
-        canConnectTo && "ring-2 ring-neon-cyan animate-bounce cursor-pointer"
-      )}
-      style={{
-        left: node.x - 48,
-        top: node.y - 48,
-        color: `hsl(var(--${getNodeColor()}))`,
+    <motion.div
+      variants={nodeVariants}
+      initial="initial"
+      animate="animate"
+      whileHover="hover"
+      whileTap="tap"
+      drag
+      dragMomentum={false}
+      dragElastic={0.1}
+      onDragEnd={(_, info) => {
+        updatePosition(node.x + info.offset.x, node.y + info.offset.y);
       }}
-      onMouseDown={onDragStart}
-      onClick={handleClick}
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick?.();
+      }}
+      className={cn(
+        "absolute flex flex-col items-center justify-center cursor-move",
+        "w-24 h-24" // Touch target area
+      )}
+      style={{ x: node.x - 48, y: node.y - 48 }} // Center pivot
     >
-      <div className="flex flex-col items-center gap-2">
-        <div 
-          className={cn(
-            "flex items-center justify-center w-12 h-12 rounded-xl transition-all duration-300",
-            node.active ? "glass neon-glow" : "bg-status-error/20"
-          )}
-          style={{
-            backgroundColor: node.active ? `hsl(var(--${getNodeColor()}) / 0.1)` : undefined,
-            borderColor: `hsl(var(--${getNodeColor()}) / 0.3)`,
-          }}
-        >
+      {/* Node Visual */}
+      <div className={cn(
+        "relative w-14 h-14 rounded-2xl glass-card flex items-center justify-center transition-colors duration-300",
+        "border-2",
+        getStatusColor(),
+        isSelected && "neon-glow shadow-[0_0_15px_rgba(6,182,212,0.5)]",
+        node.status === 'error' && "animate-pulse-red"
+      )}>
+        {/* Glow Background */}
+        <div className={cn(
+          "absolute inset-0 rounded-2xl opacity-20 transition-opacity duration-300",
+          isSelected ? "bg-neon-cyan opacity-40" : "bg-gradient-to-br from-neon-blue to-neon-purple opacity-0 group-hover:opacity-20"
+        )} />
+
+        {/* Icon */}
+        <div className="relative z-10 text-current">
           {getNodeIcon()}
         </div>
-        <span className="text-xs font-medium text-foreground/80 truncate max-w-20">
-          {node.label}
-        </span>
-        {isConnecting && (
-          <div className="text-xs font-bold text-neon-yellow">CONNECTING</div>
-        )}
-        {canConnectTo && (
-          <div className="text-xs font-bold text-neon-cyan">CONNECT TO</div>
-        )}
-        {node.isSource && (
-          <div className="text-xs font-bold text-neon-green">SOURCE</div>
-        )}
-        {node.isDestination && (
-          <div className="text-xs font-bold text-neon-purple">DEST</div>
-        )}
+
+        {/* Status Dot */}
+        <div className={cn(
+          "absolute -top-1 -right-1 w-3 h-3 rounded-full border-2 border-slate-900",
+          node.status === 'active' ? "bg-neon-green shadow-[0_0_8px_#10b981]" : "bg-neon-red"
+        )} />
       </div>
 
-      {/* Connection points */}
-      <div className="absolute -top-1 -left-1 w-2 h-2 bg-primary rounded-full opacity-0 group-hover:opacity-100 transition-opacity" />
-      <div className="absolute -top-1 -right-1 w-2 h-2 bg-primary rounded-full opacity-0 group-hover:opacity-100 transition-opacity" />
-      <div className="absolute -bottom-1 -left-1 w-2 h-2 bg-primary rounded-full opacity-0 group-hover:opacity-100 transition-opacity" />
-      <div className="absolute -bottom-1 -right-1 w-2 h-2 bg-primary rounded-full opacity-0 group-hover:opacity-100 transition-opacity" />
-    </div>
+      {/* Label */}
+      <motion.span
+        className="mt-2 text-xs font-semibold text-slate-300 bg-slate-900/80 px-2 py-0.5 rounded-full border border-white/5 backdrop-blur-sm truncate max-w-[120px]"
+        initial={{ opacity: 0, y: -5 }}
+        animate={{ opacity: 1, y: 0 }}
+      >
+        {node.name}
+      </motion.span>
+
+      {/* Connecting Indicator */}
+      {isConnecting && (
+        <motion.div
+          className="absolute -top-8 text-xs font-bold text-neon-yellow animate-bounce"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+        >
+          CONNECTING...
+        </motion.div>
+      )}
+    </motion.div>
   );
 };
+
