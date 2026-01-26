@@ -13,7 +13,7 @@ import {
     User,
     Auth,
 } from 'firebase/auth';
-import { auth } from '../config/firebase';
+import { auth } from '../lib/firebase';
 import { AppUser, UserRole } from '../types/auth';
 
 /**

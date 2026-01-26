@@ -28,6 +28,8 @@ import { AIHelpPanel } from './AIHelpPanel';
 import { CustomMessagePanel } from './CustomMessagePanel';
 import { useNetworkStore, DeviceType, Packet } from '../stores/useNetworkStore';
 import { toast } from 'sonner';
+import { useSession } from '../hooks/useSession';
+import { wsClient } from '../services/socket';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -82,35 +84,29 @@ const findPath = (
   return null;
 };
 
-// Session Timer Component with Manual Controls
+// Session Timer Component with Backend Integration
 const SessionTimer = () => {
   const {
-    sessionRunning,
-    sessionStartTime,
-    sessionElapsedTime,
+    session,
     startSession,
-    pauseSession,
-    resumeSession,
-    stopSession
-  } = useNetworkStore();
+    endSession
+  } = useSession();
 
   const [displayTime, setDisplayTime] = useState('00:00:00');
 
-  // Update display time (no auto-start)
+  // Calculate elapsed time from session
   useEffect(() => {
-    if (!sessionRunning && !sessionStartTime) {
+    if (!session) {
       setDisplayTime('00:00:00');
       return;
     }
 
     const updateTime = () => {
-      let totalMs = sessionElapsedTime;
+      const startMs = new Date(session.startTime).getTime();
+      const now = Date.now();
+      const elapsed = now - startMs;
 
-      if (sessionRunning && sessionStartTime) {
-        totalMs += Date.now() - sessionStartTime;
-      }
-
-      const totalSeconds = Math.floor(totalMs / 1000);
+      const totalSeconds = Math.floor(elapsed / 1000);
       const hours = Math.floor(totalSeconds / 3600);
       const minutes = Math.floor((totalSeconds % 3600) / 60);
       const seconds = totalSeconds % 60;
@@ -126,28 +122,17 @@ const SessionTimer = () => {
     const interval = setInterval(updateTime, 1000);
 
     return () => clearInterval(interval);
-  }, [sessionRunning, sessionStartTime, sessionElapsedTime]);
+  }, [session]);
 
-  const handleTogglePause = () => {
-    if (sessionRunning) {
-      pauseSession();
-    } else {
-      resumeSession();
-    }
+  const handleEndSession = async () => {
+    await endSession();
   };
 
-  const handleEndSession = () => {
-    stopSession();
-    toast.success('Session Ended', {
-      description: `Session duration: ${displayTime}`
-    });
-  };
-
-  // No session active - show start button
-  if (!sessionStartTime && !sessionRunning && sessionElapsedTime === 0) {
+  // No session - show start button
+  if (!session) {
     return (
       <button
-        onClick={startSession}
+        onClick={() => startSession('Network Lab Session')}
         className="flex items-center gap-2 bg-neon-green/10 hover:bg-neon-green/20 rounded-full px-4 py-2 border border-neon-green/30 hover:border-neon-green/50 transition-all group"
         title="Start New Session"
       >
@@ -157,27 +142,14 @@ const SessionTimer = () => {
     );
   }
 
-  // Session active or paused - show timer and controls
+  // Active session - show timer and controls
   return (
     <div className="flex items-center gap-2">
       {/* Timer Display */}
       <div className="flex items-center gap-2 bg-slate-800/50 rounded-full p-1 px-3 border border-white/5 backdrop-blur-sm">
-        <button
-          onClick={handleTogglePause}
-          className="p-1.5 hover:bg-white/10 rounded-full transition-colors group"
-          title={sessionRunning ? "Pause Session" : "Resume Session"}
-        >
-          {sessionRunning ? (
-            <div className="w-4 h-4 flex items-center justify-center">
-              <div className="flex gap-0.5">
-                <div className="w-1 h-3 bg-neon-yellow rounded-sm" />
-                <div className="w-1 h-3 bg-neon-yellow rounded-sm" />
-              </div>
-            </div>
-          ) : (
-            <Play className="w-4 h-4 text-neon-green fill-current" />
-          )}
-        </button>
+        <div className="p-1.5 rounded-full">
+          <div className="w-2 h-2 rounded-full bg-neon-green animate-pulse" />
+        </div>
         <span className="text-xs font-mono text-slate-300 border-l border-white/10 pl-2 min-w-[60px] tabular-nums">
           {displayTime}
         </span>
@@ -226,6 +198,53 @@ export const SimulatorLayout = () => {
 
   // Auth
   const { user, signOut: authSignOut } = useAuth();
+
+  // Session data for WebSocket
+  const { session } = useSession();
+
+  // WebSocket connection
+  useEffect(() => {
+    const connectWebSocket = async () => {
+      try {
+        await wsClient.connect();
+        console.log('WebSocket connected successfully');
+      } catch (error) {
+        console.error('Failed to connect WebSocket:', error);
+      }
+    };
+
+    connectWebSocket();
+
+    return () => {
+      wsClient.disconnect();
+    };
+  }, []);
+
+  // Join/leave session rooms
+  useEffect(() => {
+    if (session?.id) {
+      wsClient.joinSession(session.id);
+
+      return () => {
+        wsClient.leaveSession(session.id);
+      };
+    }
+  }, [session?.id]);
+
+  // Listen to packet events for animation
+  useEffect(() => {
+    const handlePacketEvent = (event: any) => {
+      console.log('Packet event received:', event);
+      // TODO: Animate packet based on event type
+      // This will be implemented when we refactor packet animation
+    };
+
+    wsClient.onPacketEvent(handlePacketEvent);
+
+    return () => {
+      wsClient.offPacketEvent(handlePacketEvent);
+    };
+  }, []);
 
   // Handle Log Click for AI
   const handleLogClick = useCallback((log: any) => {

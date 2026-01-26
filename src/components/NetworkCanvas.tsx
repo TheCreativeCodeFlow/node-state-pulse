@@ -1,5 +1,11 @@
-import React, { useRef } from 'react';
-import { useNetworkStore, Device, Connection, Packet } from '../stores/useNetworkStore';
+import React, { useRef, useState, useEffect, useCallback } from 'react';
+import { useNetworkStore, Device, Connection, ConnectionType, Packet } from '../stores/useNetworkStore';
+import { Plus, Zap, Send, Trash2, Lock as LockIcon } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import clsx from 'clsx';
+import { useCollaboration } from '@/hooks/useCollaboration';
+import { useSession } from '@/hooks/useSession';
+import { useAuth } from '@/hooks/useAuth';
 import { NetworkNode } from './NetworkNode';
 import { NetworkEdge } from './NetworkEdge';
 import { NetworkPacket } from './NetworkPacket';
@@ -39,6 +45,15 @@ export const NetworkCanvas: React.FC<NetworkCanvasProps> = ({
   // Local state for temporary connection line drawing
   const [tempConnection, setTempConnection] = React.useState<{ x1: number, y1: number, x2: number, y2: number } | null>(null);
   const [connectingNodeId, setConnectingNodeId] = React.useState<string | null>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
+  const [selectedDevice, setSelectedDevice] = useState<string | null>(null);
+  const [connectionStart, setConnectionStart] = useState<string | null>(null);
+  const [zoom, setZoom] = useState(1);
+
+  // Session and collaboration
+  const { session } = useSession();
+  const { user } = useAuth();
+  const { isLocked, getLockHolder, acquireLock, releaseLock } = useCollaboration(session?.id || null);
 
   const handleCanvasClick = (e: React.MouseEvent) => {
     if (activeMode === 'add' && canvasRef.current) {
