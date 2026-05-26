@@ -21,6 +21,8 @@ export class SessionService {
         return {
             id: session.id,
             userId: session.userId,
+            name: session.name,
+            description: session.description,
             startTime: session.startTime.toDate().toISOString(),
             lastActiveTime: session.lastActiveTime.toDate().toISOString(),
             endTime: session.endTime?.toDate().toISOString() || null,
@@ -52,10 +54,12 @@ export class SessionService {
         const newSession: Session = {
             id: sessionId,
             userId,
-            startTime: now,
+            name: data.name, // Required session name
+            description: data.description, // Optional description
+            startTime: now, // Auto-start immediately
             lastActiveTime: now,
             endTime: null,
-            status: 'active',
+            status: 'active', // Always active on creation
             topology: {
                 devices: [],
                 connections: []
@@ -73,7 +77,7 @@ export class SessionService {
 
         await collections.sessions().doc(sessionId).set(newSession);
 
-        console.log(`✅ Session created: ${sessionId} by ${userId}`);
+        console.log(`✅ Session created and started: ${sessionId} - "${data.name}" by ${userId}`);
         return this.toResponse(newSession);
     }
 

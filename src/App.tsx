@@ -4,10 +4,10 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthGuard } from "./components/AuthGuard";
-import SessionsPage from "./pages/SessionsPage";
+import LandingPage from "./pages/LandingPage";
+import SessionDashboard from "./pages/SessionDashboard";
 import SimulatorPage from "./pages/SimulatorPage";
 import TestPage from "./pages/TestPage";
-import Login from "./pages/Login";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -19,12 +19,12 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <Routes>
-          {/* Public Route - Login page */}
-          <Route path="/login" element={<Login />} />
+          {/* Public Route - Landing page */}
+          <Route path="/" element={<LandingPage />} />
 
           {/* Protected Routes - Require Authentication */}
-          <Route path="/" element={<AuthGuard><SessionsPage /></AuthGuard>} />
-          <Route path="/simulator" element={<AuthGuard><SimulatorPage /></AuthGuard>} />
+          <Route path="/dashboard" element={<AuthGuard><SessionDashboard /></AuthGuard>} />
+          <Route path="/session/:sessionId" element={<AuthGuard><SimulatorPage /></AuthGuard>} />
           <Route path="/test" element={<AuthGuard><TestPage /></AuthGuard>} />
 
           {/* Catch-all */}

@@ -17,7 +17,7 @@ interface AuthGuardProps {
 
 export const AuthGuard: React.FC<AuthGuardProps> = ({
     children,
-    redirectTo = '/login'
+    redirectTo = '/' // Redirect to landing page instead of login
 }) => {
     const { isAuthenticated, loading, initialized } = useAuth();
     const initialize = useAuthStore((state) => state.initialize);

@@ -63,10 +63,16 @@ export type SessionStatus = 'active' | 'paused' | 'ended';
 export interface Session {
     id: string;
     userId: string; // Creator's UID
+
+    // Session identification
+    name: string; // Custom session name (e.g., "Subnetting Practice - Day 1")
+    description?: string; // Optional description
+
+    // Session lifecycle
     startTime: Timestamp;
     lastActiveTime: Timestamp;
     endTime: Timestamp | null;
-    status: SessionStatus;
+    status: SessionStatus; // 'active' | 'paused' | 'ended'
 
     // Network state
     topology: NetworkTopology;
@@ -75,7 +81,7 @@ export interface Session {
     participants: SessionParticipant[];
 
     // Metadata
-    title?: string;
+    title?: string; // Kept for backward compatibility
     tags?: string[];
 
     // Timestamps
@@ -87,7 +93,9 @@ export interface Session {
  * Create session request (from client)
  */
 export interface CreateSessionRequest {
-    title?: string;
+    name: string; // Required session name
+    description?: string; // Optional description
+    title?: string; // Kept for backward compatibility
     tags?: string[];
 }
 
@@ -107,10 +115,18 @@ export interface UpdateSessionRequest {
 export interface SessionResponse {
     id: string;
     userId: string;
+
+    // Session identification
+    name: string;
+    description?: string;
+
+    // Session lifecycle
     startTime: string;
     lastActiveTime: string;
     endTime: string | null;
     status: SessionStatus;
+
+    // Network and collaboration
     topology: NetworkTopology;
     participants: Array<{
         uid: string;
@@ -118,8 +134,12 @@ export interface SessionResponse {
         joinedAt: string;
         displayName?: string;
     }>;
+
+    // Metadata
     title?: string;
     tags?: string[];
+
+    // Timestamps
     createdAt: string;
     updatedAt: string;
 }
